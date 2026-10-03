@@ -1,0 +1,70 @@
+export const records = [
+  {
+    title: 'Complete Blood Count',
+    type: 'Lab result',
+    provider: 'Northside Diagnostics',
+    date: 'Sep 18, 2026',
+    status: 'Reviewed',
+    detail: 'Routine panel · 2 pages',
+    color: 'bg-lilac text-indigo-700',
+    lab: true,
+  },
+  {
+    title: 'Annual wellness visit',
+    type: 'Visit summary',
+    provider: 'Dr. Anika Sharma',
+    date: 'Aug 29, 2026',
+    status: 'Shared',
+    detail: 'Primary care · 1 page',
+    lab: false,
+  },
+  {
+    title: 'Metabolic panel',
+    type: 'Lab result',
+    provider: 'Northside Diagnostics',
+    date: 'Jun 12, 2026',
+    status: 'Reviewed',
+    detail: 'Routine panel · 3 pages',
+    lab: true,
+  },
+  {
+    title: 'Medication summary',
+    type: 'Medication',
+    provider: 'Patient added',
+    date: 'May 03, 2026',
+    status: 'Private',
+    detail: 'Current medications · 1 page',
+    lab: false,
+  },
+]
+
+export const timeline = [
+  {
+    month: 'SEP 2026',
+    title: 'Complete blood count',
+    place: 'Northside Diagnostics',
+    kind: 'Lab result',
+    color: 'bg-violet-100 text-violet-700',
+  },
+  {
+    month: 'AUG 2026',
+    title: 'Annual wellness visit',
+    place: 'Dr. Anika Sharma · Primary care',
+    kind: 'Visit',
+    color: 'bg-teal-100 text-teal-700',
+  },
+  {
+    month: 'JUN 2026',
+    title: 'Metabolic panel',
+    place: 'Northside Diagnostics',
+    kind: 'Lab result',
+    color: 'bg-violet-100 text-violet-700',
+  },
+  {
+    month: 'MAR 2026',
+    title: 'Seasonal allergy review',
+    place: 'Dr. Anika Sharma · Primary care',
+    kind: 'Visit',
+    color: 'bg-teal-100 text-teal-700',
+  },
+]
