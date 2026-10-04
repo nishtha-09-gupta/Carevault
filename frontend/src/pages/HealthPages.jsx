@@ -1,19 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import {
-  Check,
   CloudUpload,
-  Copy,
   Download,
   FileText,
   FlaskConical,
-  Link2,
   LoaderCircle,
   Plus,
   Search,
   ShieldCheck,
   Trash2,
-  UserRoundPlus,
   UsersRound,
 } from 'lucide-react'
 import AppShell from '../components/AppShell'
@@ -21,6 +17,7 @@ import { EmptyState, PageHeading, RecordIcon, StatusBadge } from '../components/
 import { records, timeline } from '../data/demoData'
 import { fetchDocument, fetchDocuments, removeDocument, uploadDocument } from '../services/documentApi'
 import { useAuth } from '../components/AuthContext'
+import { fetchAccessGrants, fetchPatientDocumentFile, fetchPatientDocuments } from '../services/accessApi'
 
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
 const DOCUMENT_TYPES = {
@@ -34,10 +31,9 @@ export function RecordsPage({ role = 'patient' }) {
   const [params, setParams] = useSearchParams()
   const [category, setCategory] = useState('All types')
   const query = params.get('q') || ''
-  const recordsForRole = role === 'doctor'
-    ? records.map((record, index) => ({ ...record, provider: ['Nisha Rao', 'Arjun Mehta', 'Maya Iyer', 'Kabir Shah'][index % 4] }))
-    : records
-  const visible = recordsForRole.filter((record) =>
+  if (role === 'doctor') return <DocumentsPage role="doctor" />
+
+  const visible = records.filter((record) =>
     [record.title, record.provider, record.type].join(' ').toLowerCase().includes(query.toLowerCase()) &&
     (category === 'All types' || record.type === category)
   )
@@ -202,6 +198,8 @@ export function DocumentsPage({ role = 'patient' }) {
   const readOnlyDemo = user?.isDemo
   const input = useRef(null)
   const [documents, setDocuments] = useState([])
+  const [sharedPatients, setSharedPatients] = useState([])
+  const [selectedPatientId, setSelectedPatientId] = useState('')
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
   const [progress, setProgress] = useState(0)
@@ -213,14 +211,36 @@ export function DocumentsPage({ role = 'patient' }) {
 
   useEffect(() => {
     const controller = new AbortController()
-    fetchDocuments(controller.signal)
-      .then((items) => setDocuments(items))
-      .catch((error) => {
-        if (error.name !== 'AbortError') setPageError(error.message)
-      })
-      .finally(() => setLoading(false))
+    if (role === 'doctor') {
+      fetchAccessGrants()
+        .then((grants) => {
+          const active = grants.filter((grant) => grant.patient && grant.status === 'active' && new Date(grant.expiresAt) > new Date())
+          setSharedPatients(active)
+          setSelectedPatientId((current) => active.some((grant) => grant.patient.id === current) ? current : active[0]?.patient.id || '')
+          if (active.length === 0) setDocuments([])
+        })
+        .catch((error) => { if (error.name !== 'AbortError') setPageError(error.message) })
+        .finally(() => setLoading(false))
+    } else {
+      fetchDocuments(controller.signal)
+        .then((items) => setDocuments(items))
+        .catch((error) => { if (error.name !== 'AbortError') setPageError(error.message) })
+        .finally(() => setLoading(false))
+    }
     return () => controller.abort()
   }, [role, reloadCount])
+
+  useEffect(() => {
+    if (role !== 'doctor' || !selectedPatientId) return
+    let active = true
+    setLoading(true)
+    setPageError('')
+    fetchPatientDocuments(selectedPatientId)
+      .then((items) => { if (active) setDocuments(items) })
+      .catch((error) => { if (active) { setDocuments([]); setPageError(error.message) } })
+      .finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [role, selectedPatientId, reloadCount])
 
   async function saveFile(file) {
     if (!file || uploading) return
@@ -265,8 +285,15 @@ export function DocumentsPage({ role = 'patient' }) {
     newTab.opener = null
     setPageError('')
     try {
-      const fullDocument = await fetchDocument(document.id)
-      newTab.location.replace(fullDocument.fileUrl)
+      if (role === 'doctor') {
+        const file = await fetchPatientDocumentFile(selectedPatientId, document.id)
+        const fileUrl = URL.createObjectURL(file)
+        newTab.location.replace(fileUrl)
+        window.setTimeout(() => URL.revokeObjectURL(fileUrl), 5 * 60 * 1000)
+      } else {
+        const fullDocument = await fetchDocument(document.id)
+        newTab.location.replace(fullDocument.fileUrl)
+      }
     } catch (error) {
       newTab.close()
       setPageError(error.message)
@@ -294,26 +321,33 @@ export function DocumentsPage({ role = 'patient' }) {
     <AppShell role={role}>
       <PageHeading
         eyebrow="DOCUMENT LIBRARY"
-        title="Documents"
-        subtitle={readOnlyDemo ? 'Explore the private document library with this read-only demo account.' : 'Upload and manage documents in your private CareVault library.'}
-        action={
+        title={role === 'doctor' ? 'Shared patient documents' : 'Documents'}
+        subtitle={role === 'doctor' ? 'Open documents only for patients who have granted your account current access.' : readOnlyDemo ? 'Explore the private document library with this read-only demo account.' : 'Upload and manage documents in your private CareVault library.'}
+        action={role !== 'doctor' && (
           <button disabled={readOnlyDemo || uploading || loading} onClick={() => input.current?.click()} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
             <Plus size={16} /> {readOnlyDemo ? 'Demo is read-only' : 'Upload document'}
           </button>
-        }
+        )}
       />
 
-      <input
+      {role === 'doctor' && <label className="mb-5 block max-w-lg text-xs font-semibold text-slate-600">Patient with active access
+        <select className="field mt-1" value={selectedPatientId} onChange={(event) => setSelectedPatientId(event.target.value)}>
+          {sharedPatients.length === 0 && <option value="">No active patient access</option>}
+          {sharedPatients.map((grant) => <option key={grant.id} value={grant.patient.id}>{grant.patient.name} · until {new Date(grant.expiresAt).toLocaleString()}</option>)}
+        </select>
+      </label>}
+
+      {role !== 'doctor' && <input
         ref={input}
         type="file"
         accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
         className="hidden"
         onChange={(e) => saveFile(e.target.files?.[0])}
-      />
+      />}
 
       {readOnlyDemo && <p className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs leading-5 text-indigo-800">Demo mode is read-only. Create a personal account to upload files to your own private library.</p>}
 
-      <button
+      {role !== 'doctor' && <button
         type="button"
         disabled={readOnlyDemo || uploading || loading}
         aria-busy={uploading}
@@ -332,15 +366,15 @@ export function DocumentsPage({ role = 'patient' }) {
         <span className="mt-1 text-sm text-slate-500">
           PDF, JPG, JPEG, or PNG · Maximum 10 MB
         </span>
-      </button>
+      </button>}
 
-      {uploading && <div className="mb-6 rounded-xl border border-teal/15 bg-white p-4" role="status" aria-live="polite"><div className="flex items-center justify-between text-xs"><span className="font-medium text-slate-700">{progress === 100 ? 'Saving to document storage…' : 'Sending file…'}</span><span className="tabular-nums text-slate-500">{progress}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-teal transition-[width]" style={{ width: progress + '%' }}/></div></div>}
-      {uploadError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{uploadError}</p>}
+      {role !== 'doctor' && uploading && <div className="mb-6 rounded-xl border border-teal/15 bg-white p-4" role="status" aria-live="polite"><div className="flex items-center justify-between text-xs"><span className="font-medium text-slate-700">{progress === 100 ? 'Saving to document storage…' : 'Sending file…'}</span><span className="tabular-nums text-slate-500">{progress}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-teal transition-[width]" style={{ width: progress + '%' }}/></div></div>}
+      {role !== 'doctor' && uploadError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{uploadError}</p>}
       {pageError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{pageError}</p>}
       {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
 
       <h2 className="mb-4 font-semibold">
-        Your documents{' '}
+        {role === 'doctor' ? 'Documents shared by this patient' : 'Your documents'}{' '}
         <span className="ml-1 text-xs font-normal text-slate-400">
           {documents.length}
         </span>
@@ -348,8 +382,8 @@ export function DocumentsPage({ role = 'patient' }) {
 
       {loading ? <div role="status" className="card flex items-center justify-center gap-3 p-10 text-sm text-slate-500"><LoaderCircle className="animate-spin text-teal" size={18}/> Loading your documents…</div>
         : pageError && documents.length === 0 ? <div className="card p-8 text-center"><p role="alert" className="text-sm text-rose-700">{pageError}</p><button onClick={() => { setPageError(''); setLoading(true); setReloadCount((count) => count + 1) }} className="btn-secondary mt-4">Try again</button></div>
-        : documents.length === 0 ? <EmptyState title="No documents yet" text={readOnlyDemo ? 'Create an account to add files to a private document library.' : 'Upload a PDF or image to start your document library.'}/>
-        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{documents.map((document) => <DocumentCard key={document.id} document={document} readOnly={readOnlyDemo} deleting={deletingId === document.id} onOpen={() => openFile(document)} onDelete={() => deleteFile(document)}/>)}</div>}
+        : documents.length === 0 ? <EmptyState title={role === 'doctor' ? selectedPatientId ? 'No documents shared' : 'No patient access yet' : 'No documents yet'} text={role === 'doctor' ? selectedPatientId ? 'This patient has not uploaded any documents.' : 'A patient can grant your account time-limited access from their Sharing & Access page.' : readOnlyDemo ? 'Create an account to add files to a private document library.' : 'Upload a PDF or image to start your document library.'}/>
+        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{documents.map((document) => <DocumentCard key={document.id} document={document} readOnly={readOnlyDemo || role === 'doctor'} deleting={deletingId === document.id} onOpen={() => openFile(document)} onDelete={() => deleteFile(document)}/>)}</div>}
     </AppShell>
   )
 }
@@ -376,153 +410,38 @@ function DocumentCard({ document, readOnly, deleting, onOpen, onDelete }) {
 
 export function ConnectionsPage({ role = 'patient' }) {
   const doctor = role === 'doctor'
-  const [code, setCode] = useState('')
-  const [connected, setConnected] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [requestState, setRequestState] = useState({})
-  const invite = doctor ? 'DR-48XM' : 'PT-92KL'
+  const [grants, setGrants] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    fetchAccessGrants().then(setGrants).catch((requestError) => setError(requestError.message)).finally(() => setLoading(false))
+  }, [])
+
+  const activeGrants = grants.filter((grant) => grant.status === 'active' && new Date(grant.expiresAt) > new Date())
 
   return (
     <AppShell role={role}>
       <PageHeading
         eyebrow="CARE TEAM"
         title="Connections"
-        subtitle="Connect patients and clinicians using invite codes. You choose what health information to share."
+        subtitle={doctor ? 'Patients who currently share their documents with your account.' : 'Doctors with access to your documents appear here. You control each access period.'}
         action={<Link to={doctor ? '/doctor/sharing' : '/sharing'} className="btn-secondary"><ShieldCheck size={16}/> Sharing settings</Link>}
       />
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <section className="card p-6">
-          <div className="flex items-start gap-4">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-mint text-teal">
-              <Link2 size={20} />
-            </span>
-            <div>
-              <h2 className="font-semibold">Your invite code</h2>
-              <p className="mt-1 text-sm text-slate-500">
-                {doctor
-                  ? 'Share this code with a patient to receive a request.'
-                  : 'Share this code with your clinician to connect.'}
-              </p>
+      {error && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
+      <section className="card divide-y divide-slate-100 px-5">
+        {loading ? <div role="status" className="flex justify-center py-10 text-sm text-slate-500">Loading real access records…</div>
+          : activeGrants.length === 0 ? <div className="py-10 text-center"><p className="text-sm text-slate-500">No active access connections.</p><Link to={doctor ? '/doctor/sharing' : '/sharing'} className="mt-3 inline-block text-sm font-semibold text-teal">{doctor ? 'Review shared patient access' : 'Find a doctor and grant access'} →</Link></div>
+          : activeGrants.map((grant) => {
+            const person = doctor ? grant.patient : grant.doctor
+            return <div key={grant.id} className="flex flex-wrap items-center gap-3 py-4">
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-lilac text-xs font-bold text-indigo-700">{person?.name?.split(' ').map((part) => part[0]).slice(0, 2).join('') || '?'}</span>
+              <div className="min-w-0 flex-1"><p className="text-sm font-semibold">{person?.name || 'Account unavailable'}</p><p className="text-xs text-slate-400">{person?.email} · Expires {new Date(grant.expiresAt).toLocaleString()}</p></div>
+              <StatusBadge>Active</StatusBadge>
             </div>
-          </div>
-
-          <div className="mt-5 flex items-center justify-between rounded-xl border border-dashed border-teal/30 bg-mint/40 p-4">
-            <code className="text-xl font-bold tracking-[.18em] text-teal">{invite}</code>
-            <button
-              onClick={() => {
-                navigator.clipboard?.writeText(invite)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1800)
-              }}
-              className="btn-secondary !px-3 !py-2 text-xs"
-            >
-              {copied ? <Check size={14} /> : <Copy size={14} />} {copied ? 'Copied' : 'Copy code'}
-            </button>
-          </div>
-          <p className="mt-3 text-xs text-slate-400">
-            Demo code only. Invite codes are examples and are not connected to a service.
-          </p>
-        </section>
-
-        <section className="card p-6">
-          <div className="flex items-start gap-4">
-            <span className="grid h-11 w-11 place-items-center rounded-xl bg-lilac text-indigo-600">
-              <UserRoundPlus size={20} />
-            </span>
-            <div>
-              <h2 className="font-semibold">Connect with {doctor ? 'a patient' : 'a clinician'}</h2>
-              <p className="mt-1 text-sm text-slate-500">Enter the invite code you received.</p>
-            </div>
-          </div>
-
-          <form
-            className="mt-5 flex gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              if (code.trim()) setConnected(true)
-            }}
-          >
-            <input
-              className="field uppercase tracking-wider"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              placeholder={doctor ? 'Patient code' : 'Clinician code'}
-            />
-            <button className="btn-primary shrink-0">Send request</button>
-          </form>
-          {connected && (
-            <p className="mt-3 flex items-center gap-2 text-xs font-medium text-teal">
-              <Check size={15} /> Demo request sent. No account was contacted.
-            </p>
-          )}
-        </section>
-      </div>
-
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <section>
-          <h2 className="mb-4 font-semibold">{doctor ? 'Patient connections' : 'Your care team'}</h2>
-          <div className="card divide-y divide-slate-100 px-5">
-            {(doctor
-              ? [
-                  ['Nisha Rao', 'Primary care · Connected Sep 02'],
-                  ['Arjun Mehta', 'Cardiology · Connected Aug 14'],
-                ]
-              : [['Dr. Anika Sharma', 'Primary care · Connected Sep 02']]
-            ).map(([name, sub], index) => (
-              <div key={name} className="flex flex-wrap items-center gap-3 py-4">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-lilac text-xs font-bold text-indigo-700">
-                  {name
-                    .split(' ')
-                    .slice(-2)
-                    .map((x) => x[0])
-                    .join('')}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{name}</p>
-                  <p className="text-xs text-slate-400">{sub}</p>
-                </div>
-                <StatusBadge>Active</StatusBadge>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section>
-          <h2 className="mb-4 font-semibold">Pending requests</h2>
-          <div className="card divide-y divide-slate-100 px-5">
-            {(doctor
-              ? [
-                  ['Maya Iyer', 'Patient · Requested today'],
-                  ['Kabir Shah', 'Patient · Requested yesterday'],
-                ]
-              : [['Dr. Neil Patel', 'Cardiology · Requested Sep 20']]
-            ).map(([name, sub]) => (
-              <div key={name} className="flex items-center gap-3 py-4">
-                <span className="grid h-10 w-10 place-items-center rounded-full bg-amber-50 text-xs font-bold text-amber-700">
-                  {name
-                    .split(' ')
-                    .map((x) => x[0])
-                    .join('')}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold">{name}</p>
-                  <p className="text-xs text-slate-400">{sub}</p>
-                </div>
-                {requestState[name] ? <StatusBadge>{requestState[name]}</StatusBadge> : <>
-                  <StatusBadge tone="amber">Pending</StatusBadge>
-                  {doctor ? <div className="flex w-full justify-end gap-2 sm:w-auto"><button onClick={() => setRequestState((current) => ({ ...current, [name]: 'Accepted' }))} className="rounded-lg bg-mint px-2.5 py-1.5 text-xs font-semibold text-teal hover:bg-teal hover:text-white">Accept</button><button onClick={() => setRequestState((current) => ({ ...current, [name]: 'Declined' }))} className="rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-100">Decline</button></div> : <button onClick={() => setRequestState((current) => ({ ...current, [name]: 'Cancelled' }))} className="text-xs font-medium text-slate-500 hover:text-rose-700">Cancel</button>}
-                </>}
-              </div>
-            ))}
-          </div>
-        </section>
-      </div>
-
-      <p className="mt-5 flex items-center gap-2 text-xs text-slate-400">
-        <ShieldCheck size={14} className="text-teal" /> A connection does not automatically share
-        every record. You decide what to share.
-      </p>
+          })}
+      </section>
+      <p className="mt-5 flex items-center gap-2 text-xs text-slate-400"><ShieldCheck size={14} className="text-teal"/> Access is stored in CareVault and checked by the API for every shared-document request.</p>
     </AppShell>
   )
 }

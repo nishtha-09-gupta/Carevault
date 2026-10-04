@@ -32,9 +32,9 @@ export function PatientDashboard() {
 
       <div className="grid gap-4 sm:grid-cols-2">
         <section className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">PRIVATE DOCUMENTS</p><p className="mt-3 text-3xl font-bold">{error ? '—' : documents.length}</p><p className="mt-1 text-sm text-slate-500">{error || 'Files stored in your account library'}</p><Link to="/documents" className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-teal">Open document library <ArrowRight size={15}/></Link></section>
-        <section className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">YOUR ACCOUNT</p><p className="mt-3 text-lg font-semibold">Private by default</p><p className="mt-1 text-sm leading-6 text-slate-500">Only your signed-in account can list, open, or delete its documents. Sharing and care connections are not enabled yet.</p></section>
+        <section className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">YOUR ACCOUNT</p><p className="mt-3 text-lg font-semibold">Private by default</p><p className="mt-1 text-sm leading-6 text-slate-500">Only your account can access your documents unless you grant a doctor time-limited access. You can revoke that access at any time.</p></section>
       </div>
-      <p className="mt-6 text-xs leading-5 text-slate-400">Uploaded documents are stored in your account. The timeline, health details, and clinician sharing screens are not connected yet; do not rely on them as a medical record.</p>
+      <p className="mt-6 text-xs leading-5 text-slate-400">Uploaded documents are stored in your account. The timeline and health details still use sample information; document sharing is limited to access you explicitly grant.</p>
     </AppShell>
   )
 }
@@ -46,10 +46,10 @@ export function DoctorDashboard() {
       <PageHeading
         eyebrow="CLINICIAN WORKSPACE"
         title={`Welcome, ${user?.name || 'clinician'}`}
-        subtitle="Your private account is ready. Clinician verification and patient sharing are not enabled yet."
-        action={<Link to="/doctor/documents" className="btn-primary"><Plus size={16} /> Manage documents</Link>}
+        subtitle="View patient documents only while the patient’s time-limited access grant is active."
+        action={<Link to="/doctor/documents" className="btn-primary"><Plus size={16} /> Shared documents</Link>}
       />
-      <div className="card p-6"><p className="font-semibold">Clinician workspace status</p><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">This account can store its own documents. Patient lists, connection requests, shared records, and care permissions are prototype views and do not expose another account's information.</p><Link to="/doctor/documents" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal">Go to private documents <ArrowRight size={15}/></Link></div>
+      <div className="card p-6"><p className="font-semibold">Shared patient documents</p><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Patients can grant your account access for a specific period and revoke it at any time. CareVault checks the current grant and document owner on every request.</p><Link to="/doctor/documents" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal">View shared documents <ArrowRight size={15}/></Link></div>
     </AppShell>
   )
 }
