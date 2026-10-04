@@ -19,14 +19,23 @@ export function uploadDocument(buffer, originalName) {
   const publicId = 'carevault/documents/' + randomUUID() + '-' + (baseName || 'document') + extension
 
   return new Promise((resolve, reject) => {
+    let settled = false
+    const fail = (error) => {
+      if (settled) return
+      settled = true
+      reject(error)
+    }
+    const complete = (error, response) => {
+      if (error) return fail(error)
+      if (!response?.secure_url || !response?.public_id) {
+        return fail(new Error('Cloudinary returned an incomplete upload result.'))
+      }
+      if (settled) return
+      settled = true
+      resolve(response)
+    }
+
     const upload = cloudinary.uploader.upload_stream(
-      (response) => {
-        if (response?.error) return reject(response.error)
-        if (!response?.secure_url || !response?.public_id) {
-          return reject(new Error('Cloudinary returned an incomplete upload result.'))
-        }
-        return resolve(response)
-      },
       {
         resource_type: 'raw',
         type: 'authenticated',
@@ -36,8 +45,11 @@ export function uploadDocument(buffer, originalName) {
         overwrite: false,
         disable_promises: true,
       },
+      complete,
     )
-    Readable.from(buffer).pipe(upload)
+    upload.once('error', fail)
+    // A Buffer is iterable by byte; wrap it so the stream emits binary data.
+    Readable.from([buffer]).once('error', fail).pipe(upload)
   })
 }
 
