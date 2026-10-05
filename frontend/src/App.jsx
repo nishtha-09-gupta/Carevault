@@ -6,6 +6,7 @@ import { ConnectionsPage, DocumentsPage, RecordsPage, TimelinePage } from './pag
 import IntakePage from './pages/IntakePage'
 import SharingPage from './pages/SharingPage'
 import SettingsPage from './pages/SettingsPage'
+import { DoctorPatientPage, DoctorPatientsPage } from './pages/DoctorPatientsPage'
 
 function NotFound() {
   return (
@@ -44,18 +45,20 @@ function AppRoutes() {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/patient" element={<Workspace><PatientDashboard /></Workspace>} />
       <Route path="/doctor" element={<Workspace role="doctor"><DoctorDashboard /></Workspace>} />
+      <Route path="/doctor/patients" element={<Workspace role="doctor"><DoctorPatientsPage /></Workspace>} />
+      <Route path="/doctor/patients/:patientId" element={<Workspace role="doctor"><DoctorPatientPage /></Workspace>} />
       <Route path="/records" element={<Workspace><RecordsPage /></Workspace>} />
-      <Route path="/doctor/records" element={<Workspace role="doctor"><RecordsPage role="doctor" /></Workspace>} />
+      <Route path="/doctor/records" element={<Navigate to="/doctor/patients" replace />} />
       <Route path="/timeline" element={<Workspace><TimelinePage /></Workspace>} />
-      <Route path="/doctor/timeline" element={<Workspace role="doctor"><TimelinePage role="doctor" /></Workspace>} />
+      <Route path="/doctor/timeline" element={<Navigate to="/doctor/patients" replace />} />
       <Route path="/documents" element={<Workspace><DocumentsPage /></Workspace>} />
       <Route path="/doctor/documents" element={<Workspace role="doctor"><DocumentsPage role="doctor" /></Workspace>} />
       <Route path="/connections" element={<Workspace><ConnectionsPage /></Workspace>} />
-      <Route path="/doctor/connections" element={<Workspace role="doctor"><ConnectionsPage role="doctor" /></Workspace>} />
+      <Route path="/doctor/connections" element={<Navigate to="/doctor/patients" replace />} />
       <Route path="/intake" element={<Workspace><IntakePage /></Workspace>} />
       <Route path="/sharing" element={<Workspace><SharingPage /></Workspace>} />
-      <Route path="/doctor/intake" element={<Workspace role="doctor"><IntakePage role="doctor" /></Workspace>} />
-      <Route path="/doctor/sharing" element={<Workspace role="doctor"><SharingPage role="doctor" /></Workspace>} />
+      <Route path="/doctor/intake" element={<Navigate to="/doctor/patients" replace />} />
+      <Route path="/doctor/sharing" element={<Navigate to="/doctor/patients" replace />} />
       <Route path="/settings" element={<Workspace><SettingsPage /></Workspace>} />
       <Route path="/doctor/settings" element={<Workspace role="doctor"><SettingsPage role="doctor" /></Workspace>} />
       <Route path="*" element={<NotFound />} />

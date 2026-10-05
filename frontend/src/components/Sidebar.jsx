@@ -28,12 +28,8 @@ const patientItems = [
 
 const doctorItems = [
   { to: '/doctor', label: 'Overview', icon: LayoutDashboard, end: true },
-  { to: '/doctor/records', label: 'Patient records', icon: FileText },
-  { to: '/doctor/timeline', label: 'Clinical timeline', icon: Clock3 },
+  { to: '/doctor/patients', label: 'Patients', icon: UsersRound },
   { to: '/doctor/documents', label: 'Documents', icon: FolderOpen },
-  { to: '/doctor/intake', label: 'Clinical intake', icon: ClipboardList },
-  { to: '/doctor/connections', label: 'Connections', icon: UsersRound },
-  { to: '/doctor/sharing', label: 'Sharing & access', icon: LockKeyhole },
 ]
 
 export default function Sidebar({ role = 'patient', open = false, onClose }) {
@@ -103,14 +99,14 @@ export default function Sidebar({ role = 'patient', open = false, onClose }) {
           </div>
           <p className="text-sm font-semibold">Your care, in context</p>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Share the right parts of your health history with your care team.
+            {role === 'doctor' ? 'Review records patients have chosen to share with your account.' : 'Share the right parts of your health history with your care team.'}
           </p>
           <Link
-            to={role === 'doctor' ? '/doctor/connections' : '/connections'}
+            to={role === 'doctor' ? '/doctor/patients' : '/connections'}
             onClick={onClose}
             className="mt-3 inline-block text-xs font-bold text-teal hover:underline"
           >
-            Manage connections →
+            {role === 'doctor' ? 'View patients →' : 'Manage connections →'}
           </Link>
         </div>
 

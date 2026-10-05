@@ -19,6 +19,13 @@ export async function fetchAccessGrants() {
   return payload.grants
 }
 
+export async function fetchDoctorPatients() {
+  const response = await fetch('/api/doctor/patients', { credentials: 'same-origin' })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'The patient list could not be loaded.')
+  return payload.patients
+}
+
 export async function grantDoctorAccess(doctorId, durationHours) {
   const payload = await request('/', { method: 'POST', body: JSON.stringify({ doctorId, durationHours }) })
   return payload.grant
@@ -30,7 +37,7 @@ export async function revokeDoctorAccess(grantId) {
 }
 
 async function patientDocumentsRequest(patientId, suffix = '') {
-  const response = await fetch(`/api/patients/${encodeURIComponent(patientId)}/documents${suffix}`, { credentials: 'same-origin' })
+  const response = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}/documents${suffix}`, { credentials: 'same-origin' })
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}))
     throw new Error(payload.error || 'The shared documents could not be loaded.')

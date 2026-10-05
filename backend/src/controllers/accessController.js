@@ -1,6 +1,7 @@
 import mongoose from 'mongoose'
 import AccessGrant from '../models/AccessGrant.js'
 import User from '../models/User.js'
+import Document from '../models/Document.js'
 import { MAX_ACCESS_DURATION_HOURS, isValidAccessDurationHours } from '../utils/accessControl.js'
 
 function roleError(req, expected) {
@@ -59,6 +60,26 @@ export async function listAccess(req, res) {
   }
 
   return res.status(403).json({ error: 'This account cannot use sharing.' })
+}
+
+// Doctor workspace data is deliberately separate from the patient's sharing history.
+// Only currently active grants are returned; document counts are scoped to each owner.
+export async function listDoctorPatients(req, res) {
+  const error = roleError(req, 'doctor')
+  if (error) return res.status(403).json({ error })
+  const now = new Date()
+  await markExpired({ doctorId: req.user.id }, now)
+  const grants = await AccessGrant.find({ doctorId: req.user.id, status: 'active', expiresAt: { $gt: now } })
+    .populate('patientId', 'name email role').sort({ expiresAt: 1 }).lean()
+  const patients = await Promise.all(grants.filter((grant) => grant.patientId?.role === 'patient').map(async (grant) => ({
+    id: String(grant._id),
+    status: 'active',
+    grantedAt: grant.grantedAt,
+    expiresAt: grant.expiresAt,
+    patient: { id: String(grant.patientId._id), name: grant.patientId.name, email: grant.patientId.email },
+    documentCount: await Document.countDocuments({ ownerId: grant.patientId._id }),
+  })))
+  return res.json({ patients })
 }
 
 export async function grantAccess(req, res) {

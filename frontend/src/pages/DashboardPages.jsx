@@ -1,10 +1,11 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { ArrowRight, Plus } from 'lucide-react'
+import { ArrowRight, LoaderCircle, Plus } from 'lucide-react'
 import AppShell from '../components/AppShell'
 import { PageHeading, RecordIcon, SectionTitle, StatCard, StatusBadge } from '../components/UI'
 import { useAuth } from '../components/AuthContext'
 import { fetchDocuments } from '../services/documentApi'
+import { fetchDoctorPatients } from '../services/accessApi'
 
 export function PatientDashboard() {
   const { user } = useAuth()
@@ -41,15 +42,30 @@ export function PatientDashboard() {
 
 export function DoctorDashboard() {
   const { user } = useAuth()
+  const [patients, setPatients] = useState([])
+  const [loadingPatients, setLoadingPatients] = useState(true)
+  const [patientError, setPatientError] = useState('')
+  useEffect(() => {
+    fetchDoctorPatients().then(setPatients).catch((error) => setPatientError(error.message)).finally(() => setLoadingPatients(false))
+  }, [])
   return (
     <AppShell role="doctor">
       <PageHeading
         eyebrow="CLINICIAN WORKSPACE"
         title={`Welcome, ${user?.name || 'clinician'}`}
         subtitle="View patient documents only while the patient’s time-limited access grant is active."
-        action={<Link to="/doctor/documents" className="btn-primary"><Plus size={16} /> Shared documents</Link>}
+        action={<Link to="/doctor/patients" className="btn-primary">Patients <ArrowRight size={16} /></Link>}
       />
-      <div className="card p-6"><p className="font-semibold">Shared patient documents</p><p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">Patients can grant your account access for a specific period and revoke it at any time. CareVault checks the current grant and document owner on every request.</p><Link to="/doctor/documents" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal">View shared documents <ArrowRight size={15}/></Link></div>
+      <section className="mb-7 grid gap-4 sm:grid-cols-2">
+        <div className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">ACTIVE PATIENTS</p><p className="mt-3 text-3xl font-bold">{loadingPatients ? '—' : patients.length}</p><Link to="/doctor/patients" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal">Open patient list <ArrowRight size={15}/></Link></div>
+        <div className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">RECORD ACCESS</p><p className="mt-3 text-sm leading-6 text-slate-600">You can view a patient’s CareVault documents while their access grant is active. Every document request is checked against the patient, doctor, and expiry.</p></div>
+      </section>
+      <section><h2 className="mb-4 font-semibold">Patients with active access</h2>
+        {patientError ? <p role="alert" className="card p-5 text-sm text-rose-700">{patientError}</p>
+          : loadingPatients ? <div role="status" className="card flex justify-center p-8 text-sm text-slate-500"><LoaderCircle size={17} className="mr-2 animate-spin"/>Loading active access…</div>
+          : patients.length === 0 ? <div className="card p-8 text-center text-sm text-slate-500">No patients have shared their records with you yet.</div>
+          : <div className="space-y-3">{patients.slice(0, 5).map((item) => <article key={item.id} className="card flex flex-wrap items-center gap-3 p-4"><div className="min-w-0 flex-1"><p className="font-semibold">{item.patient.name}</p><p className="text-xs text-slate-500">{item.documentCount} documents · Expires {new Date(item.expiresAt).toLocaleString()}</p></div><Link to={`/doctor/patients/${item.patient.id}`} className="btn-secondary">View records</Link></article>)}</div>}
+      </section>
     </AppShell>
   )
 }

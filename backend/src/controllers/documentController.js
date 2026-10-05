@@ -53,6 +53,10 @@ export async function listSharedPatientDocuments(req, res) {
   return res.json({ documents: documents.map(toApiDocument) })
 }
 
+export const listDoctorPatientDocuments = listSharedPatientDocuments
+export const getDoctorPatientDocument = getSharedPatientDocument
+export const getDoctorPatientDocumentFile = getSharedPatientDocumentFile
+
 export async function getSharedPatientDocument(req, res) {
   if (req.user.isDemo || req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
   if (reqIsInvalidId(req.params.patientId) || reqIsInvalidId(req.params.documentId)) return res.status(404).json({ error: 'Document not found.' })
