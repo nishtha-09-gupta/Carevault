@@ -15,6 +15,7 @@ import {
   RESET_RESEND_COOLDOWN_MS,
   isResetSecretUnexpired,
 } from '../services/passwordReset.js'
+import { refreshExpiredDemoAccessForLogin } from '../services/demoSeed.js'
 
 const scrypt = promisify(scryptCallback)
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -22,7 +23,7 @@ const RESET_REQUEST_MESSAGE = 'If an account exists for that email, a verificati
 const INVALID_RESET_MESSAGE = 'That verification code is invalid or expired. Request a new code and try again.'
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role, isDemo: user.isDemo }
+  return { id: user.id, name: user.name, email: user.email, role: user.role }
 }
 
 async function passwordDigest(password, salt) {
@@ -61,6 +62,7 @@ export async function login(req, res) {
   const expected = Buffer.from(user.passwordHash, 'hex')
   const supplied = Buffer.from(await passwordDigest(password, user.passwordSalt), 'hex')
   if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return res.status(401).json({ error: 'Email or password is incorrect.' })
+  await refreshExpiredDemoAccessForLogin(user)
   setSessionCookie(res, createSession(user.id, user.sessionVersion))
   return res.json({ user: publicUser(user) })
 }
@@ -79,7 +81,7 @@ export async function requestPasswordReset(req, res) {
   }
 
   const user = await User.findOne({ email }).select('+resetOtpSentAt')
-  if (!user || user.isDemo) return res.json({ message: RESET_REQUEST_MESSAGE })
+  if (!user) return res.json({ message: RESET_REQUEST_MESSAGE })
 
   const now = new Date()
   const cutoff = new Date(now.getTime() - RESET_RESEND_COOLDOWN_MS)
@@ -126,7 +128,7 @@ export async function verifyPasswordResetOtp(req, res) {
   }
 
   const user = await User.findOne({ email }).select('+resetOtpHash +resetOtpExpiresAt +resetOtpAttempts')
-  if (!user || user.isDemo || !user.resetOtpHash || !isResetSecretUnexpired(user.resetOtpExpiresAt)) {
+  if (!user || !user.resetOtpHash || !isResetSecretUnexpired(user.resetOtpExpiresAt)) {
     return res.status(400).json({ error: INVALID_RESET_MESSAGE })
   }
 
@@ -172,7 +174,7 @@ export async function resetPassword(req, res) {
   }
 
   const user = await User.findOne({ email }).select('+resetGrantHash +resetGrantExpiresAt')
-  if (!user || user.isDemo || !user.resetGrantHash || !isResetSecretUnexpired(user.resetGrantExpiresAt)) {
+  if (!user || !user.resetGrantHash || !isResetSecretUnexpired(user.resetGrantExpiresAt)) {
     return res.status(400).json({ error: INVALID_RESET_MESSAGE })
   }
   if (!resetSecretMatches(resetToken, user.resetGrantHash)) {
@@ -197,24 +199,6 @@ export async function resetPassword(req, res) {
   )
   if (result.modifiedCount !== 1) return res.status(400).json({ error: INVALID_RESET_MESSAGE })
   return res.json({ message: 'Your password has been reset. You can now log in with your new password.' })
-}
-
-export async function demoLogin(req, res) {
-  const email = 'demo@carevault.invalid'
-  let user = await User.findOne({ email }).select('+passwordHash +passwordSalt +sessionVersion')
-  if (user && !user.isDemo) return res.status(503).json({ error: 'Demo sign-in is temporarily unavailable.' })
-  if (!user) {
-    const passwordSalt = randomBytes(16).toString('hex')
-    const passwordHash = await passwordDigest(randomBytes(32).toString('hex'), passwordSalt)
-    try {
-      user = await User.create({ name: 'CareVault Demo', email, role: 'patient', isDemo: true, passwordHash, passwordSalt })
-    } catch (error) {
-      if (error.code !== 11000) throw error
-      user = await User.findOne({ email }).select('+passwordHash +passwordSalt +sessionVersion')
-    }
-  }
-  setSessionCookie(res, createSession(user.id, user.sessionVersion || 0))
-  return res.json({ user: publicUser(user) })
 }
 
 export async function logout(req, res) {

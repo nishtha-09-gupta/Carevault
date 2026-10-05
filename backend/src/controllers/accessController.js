@@ -5,7 +5,6 @@ import Document from '../models/Document.js'
 import { MAX_ACCESS_DURATION_HOURS, isValidAccessDurationHours } from '../utils/accessControl.js'
 
 function roleError(req, expected) {
-  if (req.user.isDemo) return 'Sharing is unavailable in the read-only demo account.'
   if (req.user.role !== expected) return expected === 'patient' ? 'Only patients can manage access.' : 'Only doctors can view shared patients.'
   return null
 }
@@ -33,7 +32,7 @@ export async function searchDoctors(req, res) {
 
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const doctors = await User.find({
-    role: 'doctor', isDemo: { $ne: true },
+    role: 'doctor',
     $or: [
       { name: { $regex: escaped, $options: 'i' } },
       { email: { $regex: escaped, $options: 'i' } },
@@ -43,7 +42,6 @@ export async function searchDoctors(req, res) {
 }
 
 export async function listAccess(req, res) {
-  if (req.user.isDemo) return res.status(403).json({ error: 'Sharing is unavailable in the read-only demo account.' })
   const now = new Date()
 
   if (req.user.role === 'patient') {
@@ -79,7 +77,36 @@ export async function listDoctorPatients(req, res) {
     patient: { id: String(grant.patientId._id), name: grant.patientId.name, email: grant.patientId.email },
     documentCount: await Document.countDocuments({ ownerId: grant.patientId._id }),
   })))
+  res.setHeader('Cache-Control', 'private, no-store')
   return res.json({ patients })
+}
+
+// A prior, unrevoked grant may be shown as expired on a bookmarked detail page.
+// Revoked grants and patients with no grant remain inaccessible to the doctor UI.
+export async function getDoctorPatientAccess(req, res) {
+  const error = roleError(req, 'doctor')
+  if (error) return res.status(403).json({ error })
+  if (!mongoose.isValidObjectId(req.params.patientId)) return res.status(404).json({ error: 'Patient not found.' })
+  const patient = await User.findOne({ _id: req.params.patientId, role: 'patient' }).select('_id name email').lean()
+  if (!patient) return res.status(404).json({ error: 'Patient not found.' })
+  const grant = await AccessGrant.findOne({ patientId: patient._id, doctorId: req.user.id }).sort({ grantedAt: -1 })
+  if (!grant || grant.status === 'revoked') return res.status(403).json({ error: 'You do not have access to this patient.' })
+
+  const now = new Date()
+  if (grant.status === 'active' && grant.expiresAt <= now) {
+    grant.status = 'expired'
+    await grant.save()
+  }
+  const active = grant.status === 'active' && grant.expiresAt > now
+  res.setHeader('Cache-Control', 'private, no-store')
+  return res.json({ access: {
+    id: String(grant._id),
+    status: active ? 'active' : 'expired',
+    grantedAt: grant.grantedAt,
+    expiresAt: grant.expiresAt,
+    patient: { id: String(patient._id), name: patient.name, email: patient.email },
+    documentCount: active ? await Document.countDocuments({ ownerId: patient._id }) : 0,
+  } })
 }
 
 export async function grantAccess(req, res) {
@@ -92,7 +119,7 @@ export async function grantAccess(req, res) {
     return res.status(400).json({ error: `Choose an access duration from 1 to ${MAX_ACCESS_DURATION_HOURS} hours.` })
   }
 
-  const doctor = await User.findOne({ _id: doctorId, role: 'doctor', isDemo: { $ne: true } }).select('_id name email')
+  const doctor = await User.findOne({ _id: doctorId, role: 'doctor' }).select('_id name email')
   if (!doctor) return res.status(404).json({ error: 'Doctor account not found.' })
 
   const now = new Date()

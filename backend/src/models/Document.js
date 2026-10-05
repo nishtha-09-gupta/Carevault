@@ -6,6 +6,8 @@ const documentSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       required: true,
     },
+    // Stable seed key prevents duplicate copies of the interview account's stored records.
+    demoSeedKey: { type: String, select: false },
     title: { type: String, required: true, trim: true, maxlength: 180 },
     originalFileName: { type: String, required: true, maxlength: 255 },
     // Cloudinary's authenticated delivery URL. Use a temporary signed URL for reading.
@@ -19,5 +21,6 @@ const documentSchema = new mongoose.Schema(
 )
 
 documentSchema.index({ ownerId: 1, uploadedAt: -1 })
+documentSchema.index({ ownerId: 1, demoSeedKey: 1 }, { unique: true, partialFilterExpression: { demoSeedKey: { $type: 'string' } } })
 
 export default mongoose.model('Document', documentSchema)

@@ -57,6 +57,21 @@ export async function fetchDocument(id) {
   return payload.document
 }
 
+export async function fetchDocumentFile(id) {
+  let response
+  try {
+    response = await fetch(`${DOCUMENTS_URL}/${encodeURIComponent(id)}/file`, { credentials: 'same-origin' })
+  } catch (error) {
+    if (error instanceof TypeError) throw new Error('Could not reach the CareVault API. Start the backend and check its MongoDB connection.')
+    throw error
+  }
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}))
+    throw new Error(payload.error || 'The document could not be opened.')
+  }
+  return response.blob()
+}
+
 export async function removeDocument(id) {
   return apiRequest(DOCUMENTS_URL + '/' + encodeURIComponent(id), { method: 'DELETE' })
 }

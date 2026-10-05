@@ -13,11 +13,11 @@ import {
   UsersRound,
 } from 'lucide-react'
 import AppShell from '../components/AppShell'
+import DocumentPreview from '../components/DocumentPreview'
 import { EmptyState, PageHeading, RecordIcon, StatusBadge } from '../components/UI'
 import { records, timeline } from '../data/demoData'
-import { fetchDocument, fetchDocuments, removeDocument, uploadDocument } from '../services/documentApi'
-import { useAuth } from '../components/AuthContext'
-import { fetchAccessGrants, fetchPatientDocumentFile, fetchPatientDocuments } from '../services/accessApi'
+import { fetchDocumentFile, fetchDocuments, removeDocument, uploadDocument } from '../services/documentApi'
+import { fetchAccessGrants, fetchDoctorPatients, fetchPatientDocumentFile, fetchPatientDocuments } from '../services/accessApi'
 
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
 const DOCUMENT_TYPES = {
@@ -194,8 +194,6 @@ export function TimelinePage({ role = 'patient' }) {
 }
 
 export function DocumentsPage({ role = 'patient' }) {
-  const { user } = useAuth()
-  const readOnlyDemo = user?.isDemo
   const input = useRef(null)
   const [documents, setDocuments] = useState([])
   const [sharedPatients, setSharedPatients] = useState([])
@@ -208,19 +206,25 @@ export function DocumentsPage({ role = 'patient' }) {
   const [uploadError, setUploadError] = useState('')
   const [notice, setNotice] = useState('')
   const [reloadCount, setReloadCount] = useState(0)
+  const [now, setNow] = useState(Date.now())
+  const [preview, setPreview] = useState(null)
+  const [openingDocumentId, setOpeningDocumentId] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
     if (role === 'doctor') {
-      fetchAccessGrants()
-        .then((grants) => {
-          const active = grants.filter((grant) => grant.patient && grant.status === 'active' && new Date(grant.expiresAt) > new Date())
-          setSharedPatients(active)
-          setSelectedPatientId((current) => active.some((grant) => grant.patient.id === current) ? current : active[0]?.patient.id || '')
-          if (active.length === 0) setDocuments([])
+      const loadPatients = () => fetchDoctorPatients()
+        .then((patients) => {
+          setSharedPatients(patients)
+          setSelectedPatientId((current) => patients.some((entry) => entry.patient.id === current) ? current : patients[0]?.patient.id || '')
+          if (patients.length === 0) { setDocuments([]); setPreview(null) }
         })
         .catch((error) => { if (error.name !== 'AbortError') setPageError(error.message) })
         .finally(() => setLoading(false))
+      loadPatients()
+      const refresh = window.setInterval(loadPatients, 5000)
+      const tick = window.setInterval(() => setNow(Date.now()), 1000)
+      return () => { controller.abort(); window.clearInterval(refresh); window.clearInterval(tick) }
     } else {
       fetchDocuments(controller.signal)
         .then((items) => setDocuments(items))
@@ -230,8 +234,18 @@ export function DocumentsPage({ role = 'patient' }) {
     return () => controller.abort()
   }, [role, reloadCount])
 
+  const selectedAccess = sharedPatients.find((entry) => entry.patient.id === selectedPatientId)
+  const doctorHasActiveAccess = Boolean(selectedAccess && selectedAccess.status === 'active' && new Date(selectedAccess.expiresAt).getTime() > now)
+  const activeSharedPatients = sharedPatients.filter((entry) => entry.status === 'active' && new Date(entry.expiresAt).getTime() > now)
+
   useEffect(() => {
-    if (role !== 'doctor' || !selectedPatientId) return
+    if (role === 'doctor' && !doctorHasActiveAccess) { setDocuments([]); setPreview(null) }
+  }, [role, doctorHasActiveAccess])
+
+  useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url) }, [preview])
+
+  useEffect(() => {
+    if (role !== 'doctor' || !selectedPatientId || !doctorHasActiveAccess) return
     let active = true
     setLoading(true)
     setPageError('')
@@ -240,7 +254,7 @@ export function DocumentsPage({ role = 'patient' }) {
       .catch((error) => { if (active) { setDocuments([]); setPageError(error.message) } })
       .finally(() => { if (active) setLoading(false) })
     return () => { active = false }
-  }, [role, selectedPatientId, reloadCount])
+  }, [role, selectedPatientId, reloadCount, doctorHasActiveAccess])
 
   async function saveFile(file) {
     if (!file || uploading) return
@@ -277,27 +291,26 @@ export function DocumentsPage({ role = 'patient' }) {
   }
 
   async function openFile(document) {
-    const newTab = window.open('about:blank', '_blank')
-    if (!newTab) {
-      setPageError('Your browser blocked the new tab. Allow pop-ups, then try again.')
+    if (role === 'doctor') {
+      if (!doctorHasActiveAccess) return
+      setOpeningDocumentId(document.id)
+      setPageError('')
+      try {
+        const file = await fetchPatientDocumentFile(selectedPatientId, document.id)
+        if (Date.now() >= new Date(selectedAccess.expiresAt).getTime()) throw new Error('Access to this patient’s records has expired.')
+        setPreview({ document, url: URL.createObjectURL(file) })
+      } catch (error) { setPageError(error.message) }
+      finally { setOpeningDocumentId('') }
       return
     }
-    newTab.opener = null
     setPageError('')
+    setOpeningDocumentId(document.id)
     try {
-      if (role === 'doctor') {
-        const file = await fetchPatientDocumentFile(selectedPatientId, document.id)
-        const fileUrl = URL.createObjectURL(file)
-        newTab.location.replace(fileUrl)
-        window.setTimeout(() => URL.revokeObjectURL(fileUrl), 5 * 60 * 1000)
-      } else {
-        const fullDocument = await fetchDocument(document.id)
-        newTab.location.replace(fullDocument.fileUrl)
-      }
+      const file = await fetchDocumentFile(document.id)
+      setPreview({ document, url: URL.createObjectURL(file) })
     } catch (error) {
-      newTab.close()
       setPageError(error.message)
-    }
+    } finally { setOpeningDocumentId('') }
   }
 
   async function deleteFile(document) {
@@ -322,18 +335,18 @@ export function DocumentsPage({ role = 'patient' }) {
       <PageHeading
         eyebrow="DOCUMENT LIBRARY"
         title={role === 'doctor' ? 'Shared patient documents' : 'Documents'}
-        subtitle={role === 'doctor' ? 'Open documents only for patients who have granted your account current access.' : readOnlyDemo ? 'Explore the private document library with this read-only demo account.' : 'Upload and manage documents in your private CareVault library.'}
+        subtitle={role === 'doctor' ? 'Documents shared by patients who have granted your account active access.' : 'Upload and manage documents in your private CareVault library.'}
         action={role !== 'doctor' && (
-          <button disabled={readOnlyDemo || uploading || loading} onClick={() => input.current?.click()} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
-            <Plus size={16} /> {readOnlyDemo ? 'Demo is read-only' : 'Upload document'}
+          <button disabled={uploading || loading} onClick={() => input.current?.click()} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
+            <Plus size={16} /> Upload document
           </button>
         )}
       />
 
-      {role === 'doctor' && <label className="mb-5 block max-w-lg text-xs font-semibold text-slate-600">Patient with active access
+      {role === 'doctor' && <label className="mb-5 block max-w-lg text-xs font-semibold text-slate-600">Select an active patient
         <select className="field mt-1" value={selectedPatientId} onChange={(event) => setSelectedPatientId(event.target.value)}>
-          {sharedPatients.length === 0 && <option value="">No active patient access</option>}
-          {sharedPatients.map((grant) => <option key={grant.id} value={grant.patient.id}>{grant.patient.name} · until {new Date(grant.expiresAt).toLocaleString()}</option>)}
+          {activeSharedPatients.length === 0 && <option value="">No active patient access</option>}
+          {activeSharedPatients.map((grant) => <option key={grant.id} value={grant.patient.id}>{grant.patient.name} · until {new Date(grant.expiresAt).toLocaleString()}</option>)}
         </select>
       </label>}
 
@@ -345,17 +358,16 @@ export function DocumentsPage({ role = 'patient' }) {
         onChange={(e) => saveFile(e.target.files?.[0])}
       />}
 
-      {readOnlyDemo && <p className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-xs leading-5 text-indigo-800">Demo mode is read-only. Create a personal account to upload files to your own private library.</p>}
 
       {role !== 'doctor' && <button
         type="button"
-        disabled={readOnlyDemo || uploading || loading}
+        disabled={uploading || loading}
         aria-busy={uploading}
         onClick={() => !uploading && !loading && input.current?.click()}
         onDragOver={(e) => e.preventDefault()}
         onDrop={(e) => {
           e.preventDefault()
-          if (!readOnlyDemo) saveFile(e.dataTransfer.files?.[0])
+          saveFile(e.dataTransfer.files?.[0])
         }}
         className="mb-3 flex w-full flex-col items-center rounded-2xl border-2 border-dashed border-slate-300 bg-white px-6 py-10 text-center transition hover:border-teal hover:bg-mint/30 disabled:cursor-wait disabled:opacity-70"
       >
@@ -374,34 +386,38 @@ export function DocumentsPage({ role = 'patient' }) {
       {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
 
       <h2 className="mb-4 font-semibold">
-        {role === 'doctor' ? 'Documents shared by this patient' : 'Your documents'}{' '}
+        {role === 'doctor' ? `Documents shared by ${selectedAccess?.patient.name || 'this patient'}` : 'Your documents'}{' '}
         <span className="ml-1 text-xs font-normal text-slate-400">
           {documents.length}
         </span>
       </h2>
 
-      {loading ? <div role="status" className="card flex items-center justify-center gap-3 p-10 text-sm text-slate-500"><LoaderCircle className="animate-spin text-teal" size={18}/> Loading your documents…</div>
+      {role === 'doctor' && !doctorHasActiveAccess && !loading ? <div role="status" className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">{selectedAccess ? 'Access to this patient’s records has expired.' : 'No patients have shared their records with you yet.'}</div> : null}
+      {loading ? <div role="status" className="card flex items-center justify-center gap-3 p-10 text-sm text-slate-500"><LoaderCircle className="animate-spin text-teal" size={18}/> Loading shared records…</div>
         : pageError && documents.length === 0 ? <div className="card p-8 text-center"><p role="alert" className="text-sm text-rose-700">{pageError}</p><button onClick={() => { setPageError(''); setLoading(true); setReloadCount((count) => count + 1) }} className="btn-secondary mt-4">Try again</button></div>
-        : documents.length === 0 ? <EmptyState title={role === 'doctor' ? selectedPatientId ? 'No documents shared' : 'No patient access yet' : 'No documents yet'} text={role === 'doctor' ? selectedPatientId ? 'This patient has not uploaded any documents.' : 'A patient can grant your account time-limited access from their Sharing & Access page.' : readOnlyDemo ? 'Create an account to add files to a private document library.' : 'Upload a PDF or image to start your document library.'}/>
-        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{documents.map((document) => <DocumentCard key={document.id} document={document} readOnly={readOnlyDemo || role === 'doctor'} deleting={deletingId === document.id} onOpen={() => openFile(document)} onDelete={() => deleteFile(document)}/>)}</div>}
+        : role === 'doctor' && !doctorHasActiveAccess ? null
+        : documents.length === 0 ? <EmptyState title={role === 'doctor' ? selectedPatientId ? 'No documents shared' : 'No patient access yet' : 'No documents yet'} text={role === 'doctor' ? 'This patient has not uploaded any documents.' : 'Upload a PDF or image to start your document library.'}/>
+        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{documents.map((document) => <DocumentCard key={document.id} document={document} readOnly={role === 'doctor'} deleting={deletingId === document.id} opening={openingDocumentId === document.id} onOpen={() => openFile(document)} onDelete={() => deleteFile(document)}/>)}</div>}
+      <DocumentPreview preview={preview} onClose={() => setPreview(null)}/>
     </AppShell>
   )
 }
 
-function DocumentCard({ document, readOnly, deleting, onOpen, onDelete }) {
+function DocumentCard({ document, readOnly, deleting, opening, onOpen, onDelete }) {
   const date = new Date(document.uploadedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
   const size = document.fileSize < 1024 * 1024 ? Math.max(1, Math.round(document.fileSize / 1024)) + ' KB' : (document.fileSize / (1024 * 1024)).toFixed(1) + ' MB'
+  const type = document.fileType === 'application/pdf' ? 'PDF' : document.fileType === 'image/jpeg' ? 'JPEG image' : 'PNG image'
   return (
     <article className="card flex min-w-0 flex-col p-4">
       <div className="flex min-w-0 items-center gap-3">
         <RecordIcon lab={document.fileType === 'application/pdf'}/>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold" title={document.originalFileName}>{document.title}</p>
-          <p className="mt-1 truncate text-xs text-slate-400">{size} · {date}</p>
+          <p className="mt-1 truncate text-xs text-slate-400">{type} · {size} · {date}</p>
         </div>
       </div>
       <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3">
-        <button type="button" onClick={onOpen} className="btn-secondary flex-1 !px-3 !py-2 text-xs"><Download size={14}/> Open / download</button>
+        <button type="button" disabled={opening} onClick={onOpen} className="btn-secondary flex-1 !px-3 !py-2 text-xs">{opening ? <LoaderCircle size={14} className="animate-spin"/> : <Download size={14}/>} {readOnly ? 'Open document' : 'Open / download'}</button>
         {!readOnly && <button type="button" disabled={deleting} onClick={onDelete} aria-label={'Delete ' + document.originalFileName} className="rounded-lg border border-rose-200 p-2 text-rose-700 hover:bg-rose-50 disabled:opacity-50">{deleting ? <LoaderCircle size={15} className="animate-spin"/> : <Trash2 size={15}/>}</button>}
       </div>
     </article>

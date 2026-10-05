@@ -4,7 +4,6 @@ const userSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 120 },
   email: { type: String, required: true, unique: true, lowercase: true, trim: true, maxlength: 254 },
   role: { type: String, required: true, enum: ['patient', 'doctor'], default: 'patient' },
-  isDemo: { type: Boolean, default: false },
   passwordHash: { type: String, required: true, select: false },
   passwordSalt: { type: String, required: true, select: false },
   sessionVersion: { type: Number, default: 0, select: false },

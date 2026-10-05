@@ -12,10 +12,10 @@ export async function authenticate(req, res, next) {
     return res.status(401).json({ error: 'Your session is invalid. Please log in again.' })
   }
   try {
-    const user = await User.findById(payload.sub).select('_id name email role isDemo +sessionVersion')
+    const user = await User.findById(payload.sub).select('_id name email role +sessionVersion')
     if (!user) return res.status(401).json({ error: 'Your session is no longer valid. Please log in again.' })
     if ((payload.ver || 0) !== user.sessionVersion) return res.status(401).json({ error: 'Your session has ended. Please log in again.' })
-    req.user = { id: user.id, name: user.name, email: user.email, role: user.role, isDemo: user.isDemo, sessionVersion: user.sessionVersion }
+    req.user = { id: user.id, name: user.name, email: user.email, role: user.role, sessionVersion: user.sessionVersion }
     return next()
   } catch (error) {
     return next(error)

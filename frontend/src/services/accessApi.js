@@ -26,6 +26,21 @@ export async function fetchDoctorPatients() {
   return payload.patients
 }
 
+export async function fetchDoctorPatientAccess(patientId) {
+  const response = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}`, { credentials: 'same-origin' })
+  const payload = await response.json().catch(() => ({}))
+  // An already-running API process may predate the newer detail route. The
+  // patient list endpoint is older and still returns only active grants.
+  if (response.status === 404 && payload.error === 'API route not found.') {
+    const activePatients = await fetchDoctorPatients()
+    const active = activePatients.find((entry) => entry.patient.id === patientId)
+    if (active) return active
+    throw new Error('This patient has not granted your account active access.')
+  }
+  if (!response.ok) throw new Error(payload.error || 'Patient access could not be checked.')
+  return payload.access
+}
+
 export async function grantDoctorAccess(doctorId, durationHours) {
   const payload = await request('/', { method: 'POST', body: JSON.stringify({ doctorId, durationHours }) })
   return payload.grant
@@ -37,7 +52,14 @@ export async function revokeDoctorAccess(grantId) {
 }
 
 async function patientDocumentsRequest(patientId, suffix = '') {
-  const response = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}/documents${suffix}`, { credentials: 'same-origin' })
+  let response = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}/documents${suffix}`, { credentials: 'same-origin' })
+  if (response.status === 404) {
+    const payload = await response.clone().json().catch(() => ({}))
+    if (payload.error === 'API route not found.') {
+      // Legacy route performs the same doctor, patient, owner, and expiry checks.
+      response = await fetch(`/api/patients/${encodeURIComponent(patientId)}/documents${suffix}`, { credentials: 'same-origin' })
+    }
+  }
   if (!response.ok) {
     const payload = await response.json().catch(() => ({}))
     throw new Error(payload.error || 'The shared documents could not be loaded.')

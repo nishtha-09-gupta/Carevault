@@ -31,7 +31,29 @@ export async function getDocument(req, res) {
 
   const document = await Document.findOne({ _id: req.params.id, ownerId: req.user.id })
   if (!document) return res.status(404).json({ error: 'Document not found.' })
-  return res.json({ document: { ...toApiDocument(document), fileUrl: createTemporaryFileUrl(document) } })
+  res.setHeader('Cache-Control', 'private, no-store')
+  return res.json({ document: toApiDocument(document) })
+}
+
+async function streamDocumentFile(document, res, next) {
+  try {
+    const source = await fetch(createTemporaryFileUrl(document))
+    if (!source.ok || !source.body) return res.status(502).json({ error: 'The document is temporarily unavailable.' })
+    res.setHeader('Content-Type', document.fileType)
+    res.setHeader('Content-Length', String(document.fileSize))
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(document.originalFileName)}"`)
+    res.setHeader('Cache-Control', 'private, no-store')
+    await pipeline(Readable.fromWeb(source.body), res)
+  } catch (error) {
+    if (!res.headersSent) return next(error)
+  }
+}
+
+export async function getOwnedDocumentFile(req, res, next) {
+  if (!mongoose.isValidObjectId(req.params.id)) return res.status(404).json({ error: 'Document not found.' })
+  const document = await Document.findOne({ _id: req.params.id, ownerId: req.user.id })
+  if (!document) return res.status(404).json({ error: 'Document not found.' })
+  return streamDocumentFile(document, res, next)
 }
 
 async function activeGrantForDoctor(doctorId, patientId) {
@@ -44,12 +66,13 @@ function reqIsInvalidId(id) {
 }
 
 export async function listSharedPatientDocuments(req, res) {
-  if (req.user.isDemo || req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
+  if (req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
   if (reqIsInvalidId(req.params.patientId)) return res.status(404).json({ error: 'Patient not found.' })
   const grant = await activeGrantForDoctor(req.user.id, req.params.patientId)
   if (!grant) return res.status(403).json({ error: 'The patient has not granted you active access to these documents.' })
 
   const documents = await Document.find({ ownerId: req.params.patientId }).sort({ uploadedAt: -1 })
+  res.setHeader('Cache-Control', 'private, no-store')
   return res.json({ documents: documents.map(toApiDocument) })
 }
 
@@ -58,18 +81,19 @@ export const getDoctorPatientDocument = getSharedPatientDocument
 export const getDoctorPatientDocumentFile = getSharedPatientDocumentFile
 
 export async function getSharedPatientDocument(req, res) {
-  if (req.user.isDemo || req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
+  if (req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
   if (reqIsInvalidId(req.params.patientId) || reqIsInvalidId(req.params.documentId)) return res.status(404).json({ error: 'Document not found.' })
   const grant = await activeGrantForDoctor(req.user.id, req.params.patientId)
   if (!grant) return res.status(403).json({ error: 'The patient has not granted you active access to these documents.' })
 
   const document = await Document.findOne({ _id: req.params.documentId, ownerId: req.params.patientId })
   if (!document) return res.status(404).json({ error: 'Document not found.' })
+  res.setHeader('Cache-Control', 'private, no-store')
   return res.json({ document: toApiDocument(document) })
 }
 
 export async function getSharedPatientDocumentFile(req, res, next) {
-  if (req.user.isDemo || req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
+  if (req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
   if (reqIsInvalidId(req.params.patientId) || reqIsInvalidId(req.params.documentId)) return res.status(404).json({ error: 'Document not found.' })
   const grant = await activeGrantForDoctor(req.user.id, req.params.patientId)
   if (!grant) return res.status(403).json({ error: 'The patient has not granted you active access to these documents.' })
@@ -77,21 +101,10 @@ export async function getSharedPatientDocumentFile(req, res, next) {
   const document = await Document.findOne({ _id: req.params.documentId, ownerId: req.params.patientId })
   if (!document) return res.status(404).json({ error: 'Document not found.' })
 
-  try {
-    const source = await fetch(createTemporaryFileUrl(document))
-    if (!source.ok || !source.body) return res.status(502).json({ error: 'The shared document is temporarily unavailable.' })
-    res.setHeader('Content-Type', document.fileType)
-    res.setHeader('Content-Length', String(document.fileSize))
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(document.originalFileName)}"`)
-    res.setHeader('Cache-Control', 'private, no-store')
-    await pipeline(Readable.fromWeb(source.body), res)
-  } catch (error) {
-    if (!res.headersSent) return next(error)
-  }
+  return streamDocumentFile(document, res, next)
 }
 
 export async function uploadNewDocument(req, res) {
-  if (req.user.isDemo) return res.status(403).json({ error: 'Uploads are disabled in the read-only demo account.' })
   if (!req.file) return res.status(400).json({ error: 'Choose a file to upload.' })
 
   const fileType = await validateFileContents(req.file)
@@ -119,7 +132,6 @@ export async function uploadNewDocument(req, res) {
 }
 
 export async function deleteDocument(req, res) {
-  if (req.user.isDemo) return res.status(403).json({ error: 'Changes are disabled in the read-only demo account.' })
   if (!mongoose.isValidObjectId(req.params.id)) {
     return res.status(404).json({ error: 'Document not found.' })
   }

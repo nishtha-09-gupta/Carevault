@@ -46,16 +46,18 @@ Build the frontend with `npm --prefix frontend run build`. Run backend validatio
 
 - `POST /api/documents` — send one multipart file in a field named `document`.
 - `GET /api/documents` — list the authenticated account's document metadata.
-- `GET /api/documents/:id` — fetch one owned document and a temporary signed file URL.
+- `GET /api/documents/:id` — fetch metadata for one owned document.
+- `GET /api/documents/:id/file` — stream an owned document through the authenticated API without exposing its Cloudinary URL.
 - `DELETE /api/documents/:id` — remove an owned file from Cloudinary and its metadata from MongoDB.
 - `GET /api/access/doctors?q=...` — patient-only doctor search.
 - `GET /api/access` — patient's access history or the authenticated doctor's active patient grants.
 - `POST /api/access` and `DELETE /api/access/:id` — patient-only grant and revoke operations.
 - `GET /api/doctor/patients` — list patients who currently grant access to the authenticated doctor, including document counts.
+- `GET /api/doctor/patients/:patientId` — return the authenticated doctor's active or expired, unrevoked grant details; revoked and unknown patients are denied.
 - `GET /api/doctor/patients/:patientId/documents` and `/api/doctor/patients/:patientId/documents/:documentId/file` — patient-scoped records and file streaming, checked against the active grant on every request.
 - `GET /api/health` — basic API process check.
 
-Uploads accept PDF, JPG, JPEG, and PNG files up to 10 MB. The backend checks the extension, browser-provided MIME type, and file signature. Cloudinary stores the bytes as authenticated assets; MongoDB stores the metadata and Cloudinary identifiers, not the file bytes. The API creates a time-limited signed URL only when the owner opens a document. Passwords are salted and derived with Node's scrypt. Sessions use signed, HTTP-only, same-site cookies and expire after seven days. Login and registration attempts are rate limited. Deploy the frontend and API behind the same site so the cookie remains same-site. Document routes require a valid account session, and every document query is scoped to its owner.
+Uploads accept PDF, JPG, JPEG, and PNG files up to 10 MB. The backend checks the extension, browser-provided MIME type, and file signature. Cloudinary stores the bytes as authenticated assets; MongoDB stores the metadata and Cloudinary identifiers, not the file bytes. The API streams files only after checking the owner or active patient-doctor grant. Passwords are salted and derived with Node's scrypt. Sessions use signed, HTTP-only, same-site cookies and expire after seven days. Login and registration attempts are rate limited. Deploy the frontend and API behind the same site so the cookie remains same-site. Document routes require a valid account session, and every document query is scoped to its owner.
 
 ## Project layout
 
@@ -72,3 +74,5 @@ Uploads accept PDF, JPG, JPEG, and PNG files up to 10 MB. The backend checks the
 ## Current product boundary
 
 User registration, login, logout, password reset, account sessions, private document upload/list/open/delete, and time-limited patient-to-doctor grants are connected to MongoDB and Cloudinary. Patient grants can be revoked, expire by timestamp, and gate doctor access to each patient's documents. Doctor accounts are self-identified and are not credential-verified. CareVault currently stores document metadata and files, but it does not have a persisted structured health timeline or intake record model. OAuth, email verification, clinician credential verification, and broader operational and regulatory controls are not implemented.
+
+The login page provides credential autofill for two seeded interview accounts. Use `demo@gmail.com` / `demo123` for the patient or `doctor.demo@gmail.com` / `doctor123` for the doctor, then submit through the regular login form. At backend startup, the seed reuses those email identities (and promotes the prior `demo@carevault.invalid` patient in place when present), ensures five fictional PDF records exist as normal MongoDB documents backed by the configured Cloudinary storage, and establishes an active patient-controlled access grant using the normal access model. The grant expires after 30 days; the initializer refreshes expired/revoked fixture access on server startup, and a normal login refreshes expired demo access without changing revoked access. Seeded accounts use regular password hashing, sessions, document APIs, and authorization.

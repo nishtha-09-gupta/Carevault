@@ -53,7 +53,7 @@ export function LandingPage() {
               <Link to="/signup" className="btn-primary">
                 Create an account <ArrowRight size={17} />
               </Link>
-              <Link to="/patient" className="btn-secondary">
+              <Link to="/login" className="btn-secondary">
                 Explore the demo
               </Link>
             </div>
@@ -232,6 +232,8 @@ function Feature({ icon: Icon, title, text }) {
 export function AuthPage({ mode = 'login' }) {
   const signup = mode === 'signup'
   const [role, setRole] = useState('patient')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const navigate = useNavigate()
@@ -261,17 +263,9 @@ export function AuthPage({ mode = 'login' }) {
     }
   }
 
-  const tryDemo = async () => {
-    setError('')
-    setSubmitting(true)
-    try {
-      const user = await auth.demoSignIn()
-      navigate(location.state?.from || '/patient', { replace: true })
-    } catch (requestError) {
-      setError(requestError.message)
-    } finally {
-      setSubmitting(false)
-    }
+  const fillDemoCredentials = (account) => {
+    setEmail(account === 'doctor' ? 'doctor.demo@gmail.com' : 'demo@gmail.com')
+    setPassword(account === 'doctor' ? 'doctor123' : 'demo123')
   }
 
   return (
@@ -342,7 +336,7 @@ export function AuthPage({ mode = 'login' }) {
 
             <div>
               <label className="mb-1.5 block text-sm font-medium">Email address</label>
-              <input name="email" type="email" maxLength="254" autoComplete="email" required className="field" placeholder="you@example.com" />
+              <input name="email" type="email" maxLength="254" autoComplete="email" required className="field" placeholder="you@example.com" value={email} onChange={(event) => setEmail(event.target.value)} />
             </div>
 
             <div>
@@ -354,6 +348,8 @@ export function AuthPage({ mode = 'login' }) {
                 required
                 className="field"
                 placeholder={signup ? 'At least 6 characters' : 'Your password'}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
               />
             </div>
 
@@ -376,10 +372,12 @@ export function AuthPage({ mode = 'login' }) {
           </form>
 
           {!signup && <div className="mt-4 border-t border-slate-100 pt-4">
-            <button type="button" disabled={submitting} onClick={tryDemo} className="btn-secondary w-full justify-center disabled:opacity-60">
-              {submitting ? 'Please wait…' : 'Continue as demo user'}
-            </button>
-            <p className="mt-2 text-center text-xs text-slate-400">No password needed · read-only demo account</p>
+            <p className="mb-3 text-center text-sm font-semibold">Want to explore CareVault?</p>
+            <div className="grid grid-cols-2 gap-2">
+              <button type="button" onClick={() => fillDemoCredentials('patient')} className="btn-secondary justify-center !px-2 text-xs">Use demo patient</button>
+              <button type="button" onClick={() => fillDemoCredentials('doctor')} className="btn-secondary justify-center !px-2 text-xs">Use demo doctor</button>
+            </div>
+            <p className="mt-2 text-center text-xs text-slate-400">Credentials fill the form; log in to continue.</p>
           </div>}
 
           <p className="mt-5 text-center text-sm text-slate-500">

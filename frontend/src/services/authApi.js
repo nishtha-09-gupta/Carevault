@@ -14,6 +14,5 @@ export const signIn = (details) => request('/login', { method: 'POST', body: JSO
 export const requestPasswordReset = (email) => request('/forgot-password', { method: 'POST', body: JSON.stringify({ email }) })
 export const verifyPasswordResetOtp = (details) => request('/verify-reset-otp', { method: 'POST', body: JSON.stringify(details) })
 export const resetPassword = (details) => request('/reset-password', { method: 'POST', body: JSON.stringify(details) })
-export const demoSignIn = () => request('/demo', { method: 'POST' })
 export const signOut = () => request('/logout', { method: 'POST' })
 export const getCurrentUser = () => request('/me')

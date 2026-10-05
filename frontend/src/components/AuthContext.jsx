@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState } from 'react'
-import { demoSignIn, getCurrentUser, signIn, signOut, signUp } from '../services/authApi'
+import { getCurrentUser, signIn, signOut, signUp } from '../services/authApi'
 
 const AuthContext = createContext(null)
 
@@ -15,7 +15,6 @@ export function AuthProvider({ children }) {
     user,
     loading,
     async signIn(details) { const result = await signIn(details); setUser(result.user); return result.user },
-    async demoSignIn() { const result = await demoSignIn(); setUser(result.user); return result.user },
     async signUp(details) { const result = await signUp(details); setUser(result.user); return result.user },
     async signOut() { try { await signOut() } finally { setUser(null) } },
   }

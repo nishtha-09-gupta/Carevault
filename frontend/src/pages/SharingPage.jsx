@@ -3,7 +3,6 @@ import { Clock3, LoaderCircle, Search, ShieldCheck, UserRoundPlus } from 'lucide
 import { Link } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import { EmptyState, PageHeading, StatusBadge } from '../components/UI'
-import { useAuth } from '../components/AuthContext'
 import { fetchAccessGrants, findDoctors, grantDoctorAccess, revokeDoctorAccess } from '../services/accessApi'
 
 function dateTime(value) {
@@ -11,7 +10,6 @@ function dateTime(value) {
 }
 
 export default function SharingPage({ role = 'patient' }) {
-  const { user } = useAuth()
   const isDoctor = role === 'doctor'
   const [grants, setGrants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -104,11 +102,10 @@ export default function SharingPage({ role = 'patient' }) {
         action={<span className="inline-flex items-center gap-2 rounded-full bg-mint px-3 py-1.5 text-xs font-semibold text-teal"><ShieldCheck size={14}/>{activeGrants.length} active</span>}
       />
 
-      {user?.isDemo && <p role="status" className="mb-5 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-800">Sharing is disabled for the read-only demo account.</p>}
       {error && <p role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
       {notice && <p role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
 
-      {!isDoctor && !user?.isDemo && <section className="card mb-7 p-5 sm:p-6">
+      {!isDoctor && <section className="card mb-7 p-5 sm:p-6">
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-mint text-teal"><UserRoundPlus size={18}/></span>
           <div><h2 className="font-semibold">Grant a doctor temporary access</h2><p className="mt-1 text-sm text-slate-500">Doctors can view your uploaded documents until the access period ends or you revoke it.</p></div>
@@ -122,7 +119,7 @@ export default function SharingPage({ role = 'patient' }) {
               <option value="1">1 hour</option><option value="6">6 hours</option><option value="24">24 hours</option><option value="168">7 days</option><option value="custom">Custom</option>
             </select>
           </label>
-          <button type="button" className="btn-primary" disabled={saving || !selectedDoctor || !validHours || user?.isDemo} onClick={grant}>{saving ? <LoaderCircle size={16} className="animate-spin"/> : <ShieldCheck size={16}/>} Grant access</button>
+          <button type="button" className="btn-primary" disabled={saving || !selectedDoctor || !validHours} onClick={grant}>{saving ? <LoaderCircle size={16} className="animate-spin"/> : <ShieldCheck size={16}/>} Grant access</button>
         </form>
         {duration === 'custom' && <label className="mt-3 block max-w-xs text-xs font-semibold text-slate-600">Custom duration in hours
           <input type="number" min="1" max="720" step="1" className="field mt-1" value={customHours} onChange={(event) => setCustomHours(event.target.value)}/>

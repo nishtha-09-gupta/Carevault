@@ -28,7 +28,7 @@ export default function Topbar({ role = 'patient', onMenu }) {
         >
           <Search size={16} />
           <input
-            aria-label="Search health history"
+            aria-label={role === 'doctor' ? 'Search active patients' : 'Search health history'}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={role === 'doctor' ? 'Search active patients' : 'Search your health history'}
