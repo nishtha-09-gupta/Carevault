@@ -108,9 +108,9 @@ export async function requestPasswordReset(req, res) {
   if (!stored) return res.json({ message: RESET_REQUEST_MESSAGE })
 
   try {
-    await sendPasswordResetCode(email, otp)
+    await sendPasswordResetCode(user.email, otp)
   } catch {
-    console.error('Password reset email delivery failed.')
+    if (process.env.NODE_ENV === 'production') console.error('Password reset email delivery failed.')
     await User.updateOne(
       { _id: user._id, resetOtpHash: hashResetSecret(otp) },
       { $unset: { resetOtpHash: 1, resetOtpExpiresAt: 1, resetOtpSentAt: 1, resetOtpAttempts: 1 } },

@@ -16,7 +16,7 @@ npm --prefix frontend install
 npm --prefix backend install
 ```
 
-Create `backend/.env` from `backend/.env.example`, then set `MONGODB_URI`, `MONGODB_DATABASE`, `SESSION_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. To deliver password reset emails, also set `RESEND_API_KEY` and `EMAIL_FROM`. Create a Resend account at https://resend.com, create an API key, and verify a sending domain; use an address on that verified domain for `EMAIL_FROM` (for example, `CareVault <passwords@example.com>`). Use a cryptographically random `SESSION_SECRET` with at least 32 characters. Keep `backend/.env` private; it is ignored by Git. `MONGODB_DATABASE` defaults to `carevault` if omitted.
+Create `backend/.env` from `backend/.env.example`, then set `MONGODB_URI`, `MONGODB_DATABASE`, `SESSION_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. To deliver password-reset emails, configure `EMAIL_USER`, `EMAIL_PASS`, and `EMAIL_FROM` for a Gmail account with a Google App Password. These values are backend-only; keep `backend/.env` private. Use a cryptographically random `SESSION_SECRET` with at least 32 characters. `MONGODB_DATABASE` defaults to `carevault` if omitted.
 
 ## Run locally
 

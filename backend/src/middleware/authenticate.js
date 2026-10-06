@@ -2,6 +2,9 @@ import { verifySession } from '../services/session.js'
 import User from '../models/User.js'
 
 export async function authenticate(req, res, next) {
+  // Authenticated patient data must not be restored from a browser or proxy
+  // cache after logout or an account switch.
+  res.setHeader('Cache-Control', 'private, no-store')
   let payload
   try {
     const token = req.headers.cookie?.split(';').map((item) => item.trim()).find((item) => item.startsWith('carevault_session='))?.slice('carevault_session='.length)

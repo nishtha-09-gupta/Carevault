@@ -255,7 +255,13 @@ export function AuthPage({ mode = 'login' }) {
       const user = signup
         ? await auth.signUp({ name: data.get('name'), email: data.get('email'), password, role })
         : await auth.signIn({ email: data.get('email'), password })
-      navigate(location.state?.from || (user.role === 'doctor' ? '/doctor' : '/patient'), { replace: true })
+      const requestedPath = location.state?.from
+      const compatiblePath = typeof requestedPath === 'string' && (
+        user.role === 'doctor'
+          ? requestedPath === '/doctor' || requestedPath.startsWith('/doctor/')
+          : !requestedPath.startsWith('/doctor')
+      )
+      navigate(compatiblePath ? requestedPath : (user.role === 'doctor' ? '/doctor' : '/patient'), { replace: true })
     } catch (requestError) {
       setError(requestError.message)
     } finally {

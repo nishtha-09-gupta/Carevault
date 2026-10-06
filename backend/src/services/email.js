@@ -1,22 +1,50 @@
-const RESEND_ENDPOINT = 'https://api.resend.com/emails'
+import nodemailer from 'nodemailer'
+
+let transporter
+
+function getTransporter() {
+  if (!transporter) {
+    transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+      },
+    })
+  }
+  return transporter
+}
+
+function safeDiagnostic(value) {
+  return String(value ?? '')
+    .replaceAll(process.env.EMAIL_PASS || '\u0000', '[redacted credential]')
+    .replaceAll(process.env.EMAIL_USER || '\u0000', '[redacted email]')
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, '[redacted email]')
+    .slice(0, 1000)
+}
 
 export function emailIsConfigured() {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM)
+  return Boolean(process.env.EMAIL_USER && process.env.EMAIL_PASS && process.env.EMAIL_FROM)
 }
 
 export async function sendPasswordResetCode(to, code) {
-  const response = await fetch(RESEND_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
+  try {
+    const result = await getTransporter().sendMail({
       from: process.env.EMAIL_FROM,
-      to: [to],
+      to,
       subject: 'Your CareVault password reset code',
       text: `Your CareVault password reset code is ${code}. It expires in 10 minutes. If you did not request this, you can ignore this email.`,
-    }),
-  })
-  if (!response.ok) throw new Error('Password reset email delivery failed.')
+    })
+    console.info('[password-reset] Gmail SMTP accepted the email.', {
+      messageId: result.messageId || null,
+    })
+  } catch (error) {
+    console.error('[password-reset] Gmail SMTP email delivery failed.', {
+      code: error?.code,
+      command: error?.command,
+      responseCode: error?.responseCode,
+      error: safeDiagnostic(error?.message || error),
+    })
+    throw new Error('Password reset email delivery failed.')
+  }
 }

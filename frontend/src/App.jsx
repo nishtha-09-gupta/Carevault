@@ -1,3 +1,4 @@
+import { Fragment } from 'react'
 import { Route, Routes, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './components/AuthContext'
 import { LandingPage, AuthPage, ForgotPasswordPage } from './pages/PublicPages'
@@ -31,7 +32,9 @@ function RequireAuth({ children, role }) {
   if (loading) return <main className="grid min-h-screen place-items-center text-sm text-slate-500">Loading your account…</main>
   if (!user) return <Navigate to="/login" replace state={{ from: location.pathname }} />
   if (role && user.role !== role) return <Navigate to={user.role === 'doctor' ? '/doctor' : '/patient'} replace />
-  return children
+  // Route-local state and data caches must not survive an account switch, even
+  // when both accounts navigate to the same path.
+  return <Fragment key={`${user.id}:${user.role}`}>{children}</Fragment>
 }
 
 function Workspace({ children, role }) { return <RequireAuth role={role}>{children}</RequireAuth> }
@@ -43,23 +46,23 @@ function AppRoutes() {
       <Route path="/login" element={<AuthPage />} />
       <Route path="/signup" element={<AuthPage mode="signup" />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/patient" element={<Workspace><PatientDashboard /></Workspace>} />
+      <Route path="/patient" element={<Workspace role="patient"><PatientDashboard /></Workspace>} />
       <Route path="/doctor" element={<Workspace role="doctor"><DoctorDashboard /></Workspace>} />
       <Route path="/doctor/patients" element={<Workspace role="doctor"><DoctorPatientsPage /></Workspace>} />
       <Route path="/doctor/patients/:patientId" element={<Workspace role="doctor"><DoctorPatientPage /></Workspace>} />
-      <Route path="/records" element={<Workspace><RecordsPage /></Workspace>} />
+      <Route path="/records" element={<Workspace role="patient"><RecordsPage /></Workspace>} />
       <Route path="/doctor/records" element={<Navigate to="/doctor/patients" replace />} />
-      <Route path="/timeline" element={<Workspace><TimelinePage /></Workspace>} />
+      <Route path="/timeline" element={<Workspace role="patient"><TimelinePage /></Workspace>} />
       <Route path="/doctor/timeline" element={<Navigate to="/doctor/patients" replace />} />
-      <Route path="/documents" element={<Workspace><DocumentsPage /></Workspace>} />
+      <Route path="/documents" element={<Workspace role="patient"><DocumentsPage /></Workspace>} />
       <Route path="/doctor/documents" element={<Workspace role="doctor"><DocumentsPage role="doctor" /></Workspace>} />
-      <Route path="/connections" element={<Workspace><ConnectionsPage /></Workspace>} />
+      <Route path="/connections" element={<Workspace role="patient"><ConnectionsPage /></Workspace>} />
       <Route path="/doctor/connections" element={<Navigate to="/doctor/patients" replace />} />
-      <Route path="/intake" element={<Workspace><IntakePage /></Workspace>} />
-      <Route path="/sharing" element={<Workspace><SharingPage /></Workspace>} />
+      <Route path="/intake" element={<Workspace role="patient"><IntakePage /></Workspace>} />
+      <Route path="/sharing" element={<Workspace role="patient"><SharingPage /></Workspace>} />
       <Route path="/doctor/intake" element={<Navigate to="/doctor/patients" replace />} />
       <Route path="/doctor/sharing" element={<Navigate to="/doctor/patients" replace />} />
-      <Route path="/settings" element={<Workspace><SettingsPage /></Workspace>} />
+      <Route path="/settings" element={<Workspace role="patient"><SettingsPage /></Workspace>} />
       <Route path="/doctor/settings" element={<Workspace role="doctor"><SettingsPage role="doctor" /></Workspace>} />
       <Route path="*" element={<NotFound />} />
     </Routes>

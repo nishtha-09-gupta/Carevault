@@ -40,7 +40,7 @@ export default function Footer() {
             ))}
           </div>
         </div>
-        <div className="mt-10 border-t border-slate-100 pt-5 text-xs leading-5 text-slate-400">Accounts and uploaded documents are stored by the connected backend. Sample timeline, intake, and sharing screens are not persisted or monitored. CareVault does not provide medical advice.</div>
+        <div className="mt-10 border-t border-slate-100 pt-5 text-xs leading-5 text-slate-400">Accounts, health intake, sharing settings, and uploaded documents are stored by the connected backend. The timeline currently shows fictional sample events and is not monitored. CareVault does not provide medical advice.</div>
       </div>
     </footer>
   )

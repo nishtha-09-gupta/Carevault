@@ -4,6 +4,7 @@ import authRoutes from './routes/authRoutes.js'
 import accessRoutes from './routes/accessRoutes.js'
 import patientRoutes from './routes/patientRoutes.js'
 import doctorRoutes from './routes/doctorRoutes.js'
+import healthIntakeRoutes from './routes/healthIntakeRoutes.js'
 import { errorHandler } from './middleware/errorHandler.js'
 
 const app = express()
@@ -15,6 +16,7 @@ app.use('/api/auth', authRoutes)
 app.use('/api/access', accessRoutes)
 app.use('/api/patients', patientRoutes)
 app.use('/api/doctor', doctorRoutes)
+app.use('/api/health-intake', healthIntakeRoutes)
 app.use('/api/documents', documentRoutes)
 app.use((req, res) => res.status(404).json({ error: 'API route not found.' }))
 app.use(errorHandler)

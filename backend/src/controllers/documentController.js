@@ -2,8 +2,7 @@ import mongoose from 'mongoose'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import Document from '../models/Document.js'
-import AccessGrant from '../models/AccessGrant.js'
-import { activeGrantQuery } from '../utils/accessControl.js'
+import { findActivePatientGrant } from '../services/patientAccess.js'
 import { createTemporaryFileUrl, deleteStoredDocument, uploadDocument } from '../services/documentStorage.js'
 import { getTitle, validateFileContents } from '../utils/documentValidation.js'
 
@@ -56,11 +55,6 @@ export async function getOwnedDocumentFile(req, res, next) {
   return streamDocumentFile(document, res, next)
 }
 
-async function activeGrantForDoctor(doctorId, patientId) {
-  if (reqIsInvalidId(doctorId) || reqIsInvalidId(patientId)) return null
-  return AccessGrant.findOne(activeGrantQuery(patientId, doctorId, new Date())).select('_id expiresAt')
-}
-
 function reqIsInvalidId(id) {
   return !mongoose.isValidObjectId(id)
 }
@@ -68,7 +62,7 @@ function reqIsInvalidId(id) {
 export async function listSharedPatientDocuments(req, res) {
   if (req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
   if (reqIsInvalidId(req.params.patientId)) return res.status(404).json({ error: 'Patient not found.' })
-  const grant = await activeGrantForDoctor(req.user.id, req.params.patientId)
+  const grant = await findActivePatientGrant(req.params.patientId, req.user.id)
   if (!grant) return res.status(403).json({ error: 'The patient has not granted you active access to these documents.' })
 
   const documents = await Document.find({ ownerId: req.params.patientId }).sort({ uploadedAt: -1 })
@@ -83,7 +77,7 @@ export const getDoctorPatientDocumentFile = getSharedPatientDocumentFile
 export async function getSharedPatientDocument(req, res) {
   if (req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
   if (reqIsInvalidId(req.params.patientId) || reqIsInvalidId(req.params.documentId)) return res.status(404).json({ error: 'Document not found.' })
-  const grant = await activeGrantForDoctor(req.user.id, req.params.patientId)
+  const grant = await findActivePatientGrant(req.params.patientId, req.user.id)
   if (!grant) return res.status(403).json({ error: 'The patient has not granted you active access to these documents.' })
 
   const document = await Document.findOne({ _id: req.params.documentId, ownerId: req.params.patientId })
@@ -95,7 +89,7 @@ export async function getSharedPatientDocument(req, res) {
 export async function getSharedPatientDocumentFile(req, res, next) {
   if (req.user.role !== 'doctor') return res.status(403).json({ error: 'Only signed-in doctors can view shared patient documents.' })
   if (reqIsInvalidId(req.params.patientId) || reqIsInvalidId(req.params.documentId)) return res.status(404).json({ error: 'Document not found.' })
-  const grant = await activeGrantForDoctor(req.user.id, req.params.patientId)
+  const grant = await findActivePatientGrant(req.params.patientId, req.user.id)
   if (!grant) return res.status(403).json({ error: 'The patient has not granted you active access to these documents.' })
 
   const document = await Document.findOne({ _id: req.params.documentId, ownerId: req.params.patientId })

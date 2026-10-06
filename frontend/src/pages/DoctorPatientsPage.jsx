@@ -4,7 +4,7 @@ import { ArrowLeft, Clock3, FileText, LoaderCircle, UsersRound } from 'lucide-re
 import AppShell from '../components/AppShell'
 import { EmptyState, PageHeading, RecordIcon, StatusBadge } from '../components/UI'
 import DocumentPreview from '../components/DocumentPreview'
-import { fetchDoctorPatientAccess, fetchDoctorPatients, fetchPatientDocumentFile, fetchPatientDocuments } from '../services/accessApi'
+import { fetchDoctorPatientAccess, fetchDoctorPatients, fetchPatientDocumentFile, fetchPatientDocuments, fetchPatientHealthIntake } from '../services/accessApi'
 
 function dateTime(value) {
   return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
@@ -68,6 +68,7 @@ export function DoctorPatientPage() {
   const { patientId } = useParams()
   const [access, setAccess] = useState(null)
   const [documents, setDocuments] = useState([])
+  const [intake, setIntake] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [opening, setOpening] = useState('')
@@ -82,14 +83,20 @@ export function DoctorPatientPage() {
       setAccess(current)
       if (current.status !== 'active' || new Date(current.expiresAt).getTime() <= Date.now()) {
         setDocuments([])
+        setIntake(null)
         setPreview(null)
         return
       }
-      const docs = await fetchPatientDocuments(patientId)
+      const [docs, currentIntake] = await Promise.all([
+        fetchPatientDocuments(patientId),
+        fetchPatientHealthIntake(patientId),
+      ])
       setDocuments(docs)
+      setIntake(currentIntake)
       setError('')
     } catch (e) {
       setDocuments([])
+      setIntake(null)
       setPreview(null)
       setError(e.message)
       setAccess(null)
@@ -152,8 +159,20 @@ export function DoctorPatientPage() {
             <button type="button" disabled={opening === doc.id || !isActive} onClick={() => previewDocument(doc)} className="btn-secondary mt-4 w-full !px-3 !py-2 text-xs">{opening === doc.id ? <LoaderCircle size={14} className="animate-spin"/> : <FileText size={14}/>}Open document</button>
           </article>)}</div>}
         </section>
+        <section className="card mt-7 p-5 sm:p-6"><h2 className="font-semibold">Patient health intake</h2>
+          {!isActive ? <p className="mt-2 text-sm text-slate-500">Patient intake is unavailable without active access.</p>
+            : !intake ? <p className="mt-2 text-sm text-slate-500">No submitted health intake is available.</p>
+            : <><p className="mt-1 text-xs text-slate-400">Updated {dateTime(intake.updatedAt)}</p><dl className="mt-4 grid gap-4 sm:grid-cols-2">
+              <IntakeDetail label="Main concern" value={intake.mainConcern}/>
+              {intake.startedAt && <IntakeDetail label="When it began" value={dateTime(intake.startedAt)}/>}
+              {intake.impact && <IntakeDetail label="Impact" value={intake.impact}/>}
+              {intake.allergies && <IntakeDetail label="Known allergies" value={intake.allergies}/>}
+              {intake.medications && <IntakeDetail label="Current medications" value={intake.medications}/>}
+              {intake.additionalNotes && <IntakeDetail label="Additional notes" value={intake.additionalNotes}/>}
+            </dl></>}
+        </section>
         {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
-        <section className="card mt-7 p-5"><h2 className="font-semibold">Health history</h2><p className="mt-2 text-sm leading-6 text-slate-500">CareVault does not currently store patient timeline or health-history entries in the database. Only the documents listed above are available through this active access grant.</p></section>
+        <section className="card mt-7 p-5"><h2 className="font-semibold">Health history</h2><p className="mt-2 text-sm leading-6 text-slate-500">Patient-provided intake is shown above when submitted. CareVault’s timeline remains a separate sample view.</p></section>
       </>}
     <DocumentPreview preview={preview} onClose={closePreview}/>
   </AppShell>
@@ -161,4 +180,8 @@ export function DoctorPatientPage() {
 
 function Info({ label, value }) {
   return <div><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</p><p className="mt-1 text-sm font-medium text-slate-700">{value}</p></div>
+}
+
+function IntakeDetail({ label, value }) {
+  return <div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">{label}</dt><dd className="mt-1 whitespace-pre-wrap text-sm leading-6 text-slate-700">{value}</dd></div>
 }

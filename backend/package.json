@@ -17,6 +17,7 @@
     "express": "^5.1.0",
     "file-type": "^21.0.0",
     "mongoose": "^8.16.1",
-    "multer": "^2.0.2"
+    "multer": "^2.0.2",
+    "nodemailer": "^10.0.15"
   }
 }

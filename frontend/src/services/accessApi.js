@@ -77,3 +77,10 @@ export async function fetchPatientDocumentFile(patientId, documentId) {
   const response = await patientDocumentsRequest(patientId, `/${encodeURIComponent(documentId)}/file`)
   return response.blob()
 }
+
+export async function fetchPatientHealthIntake(patientId) {
+  const response = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}/intake`, { credentials: 'same-origin' })
+  const body = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(body.error || 'Could not load the patient health intake.')
+  return body.intake
+}
