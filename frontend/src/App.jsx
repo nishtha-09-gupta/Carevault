@@ -1,7 +1,7 @@
 import { Fragment } from 'react'
 import { Route, Routes, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './components/AuthContext'
-import { LandingPage, AuthPage, ForgotPasswordPage } from './pages/PublicPages'
+import { LandingPage, AuthPage, ForgotPasswordPage, HowItWorksPage, ForYouPage, PrivacyPage } from './pages/PublicPages'
 import { DoctorDashboard, PatientDashboard } from './pages/DashboardPages'
 import { ConnectionsPage, DocumentsPage, RecordsPage, TimelinePage } from './pages/HealthPages'
 import IntakePage from './pages/IntakePage'
@@ -43,6 +43,9 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<LandingPage />} />
+      <Route path="/how-it-works" element={<HowItWorksPage />} />
+      <Route path="/for-you" element={<ForYouPage />} />
+      <Route path="/privacy" element={<PrivacyPage />} />
       <Route path="/login" element={<AuthPage />} />
       <Route path="/signup" element={<AuthPage mode="signup" />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
