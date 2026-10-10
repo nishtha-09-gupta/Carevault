@@ -15,6 +15,8 @@ const documentSchema = new mongoose.Schema(
     filePublicId: { type: String, required: true, unique: true },
     fileType: { type: String, required: true, enum: ['application/pdf', 'image/jpeg', 'image/png'] },
     fileSize: { type: Number, required: true, min: 1 },
+    category: { type: String, enum: ['Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'], default: null },
+    eventDate: { type: Date, default: null },
     uploadedAt: { type: Date, default: Date.now },
   },
   { timestamps: false },

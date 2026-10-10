@@ -172,7 +172,7 @@ export function DoctorPatientPage() {
             </dl></>}
         </section>
         {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
-        <section className="card mt-7 p-5"><h2 className="font-semibold">Health history</h2><p className="mt-2 text-sm leading-6 text-slate-500">Patient-provided intake is shown above when submitted. CareVault’s timeline remains a separate sample view.</p></section>
+        <section className="card mt-7 p-5"><h2 className="font-semibold">Health history</h2><p className="mt-2 text-sm leading-6 text-slate-500">This view contains only documents shared under the active access grant and health intake the patient submitted.</p></section>
       </>}
     <DocumentPreview preview={preview} onClose={closePreview}/>
   </AppShell>

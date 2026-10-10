@@ -15,9 +15,9 @@ import {
 import AppShell from '../components/AppShell'
 import DocumentPreview from '../components/DocumentPreview'
 import { EmptyState, PageHeading, RecordIcon, StatusBadge } from '../components/UI'
-import { records, timeline } from '../data/demoData'
 import { fetchDocumentFile, fetchDocuments, removeDocument, uploadDocument } from '../services/documentApi'
 import { fetchAccessGrants, fetchDoctorPatients, fetchPatientDocumentFile, fetchPatientDocuments } from '../services/accessApi'
+import { deleteMedicalRecord, fetchMedicalRecords, fetchTimeline, saveMedicalRecord } from '../services/medicalRecordApi'
 
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
 const DOCUMENT_TYPES = {
@@ -30,29 +30,55 @@ const DOCUMENT_TYPES = {
 export function RecordsPage({ role = 'patient' }) {
   const [params, setParams] = useSearchParams()
   const [category, setCategory] = useState('All types')
+  const [records, setRecords] = useState([])
+  const [documents, setDocuments] = useState([])
+  const [isDemoAccount, setIsDemoAccount] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [editing, setEditing] = useState(null)
+  const [saving, setSaving] = useState(false)
+  const [notice, setNotice] = useState('')
+  const [revision, setRevision] = useState(0)
   const query = params.get('q') || ''
   if (role === 'doctor') return <DocumentsPage role="doctor" />
-
-  const visible = records.filter((record) =>
-    [record.title, record.provider, record.type].join(' ').toLowerCase().includes(query.toLowerCase()) &&
-    (category === 'All types' || record.type === category)
-  )
-  const displayRows = visible
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchMedicalRecords(controller.signal).then((payload) => { setRecords(payload.records); setDocuments(payload.documents); setIsDemoAccount(payload.isDemoAccount) }).catch((e) => { if (e.name !== 'AbortError') setError(e.message) }).finally(() => setLoading(false))
+    return () => controller.abort()
+  }, [revision])
+  const visibleRecords = records.filter((r) => [r.title, r.provider, r.category, r.notes].join(' ').toLowerCase().includes(query.toLowerCase()) && (category === 'All types' || r.category === category))
+  const visibleDocuments = documents.filter((d) => [d.title, d.category].join(' ').toLowerCase().includes(query.toLowerCase()) && (category === 'All types' || d.category === category))
+  async function submitRecord(event) {
+    event.preventDefault(); setSaving(true); setError(''); setNotice('')
+    const form = new FormData(event.currentTarget)
+    try { await saveMedicalRecord({ id: editing?.id, title: form.get('title'), category: form.get('category'), provider: form.get('provider'), eventDate: form.get('eventDate'), notes: form.get('notes'), documentId: form.get('documentId') || null }); setEditing(null); setRevision((n) => n + 1); setNotice('Medical record saved.') }
+    catch (e) { setError(e.message) } finally { setSaving(false) }
+  }
+  async function deleteRecord(record) {
+    if (!window.confirm(`Delete “${record.title}”?`)) return
+    try { await deleteMedicalRecord(record.id); setRevision((n) => n + 1); setNotice('Medical record deleted.') } catch (e) { setError(e.message) }
+  }
 
   return (
     <AppShell role={role}>
       <PageHeading
         eyebrow="YOUR HEALTH HISTORY"
         title={role === 'doctor' ? 'Patient records' : 'Medical records'}
-        subtitle={role === 'doctor' ? 'Prototype sample only. Patient-shared records are not available yet.' : 'This screen shows sample records only. Upload your own files in Documents.'}
-        action={
-          <Link to={role === 'doctor' ? '/doctor/documents' : '/documents'} className="btn-primary">
-            <Plus size={16} /> Add record
-          </Link>
-        }
+        subtitle="Your saved medical records and uploaded documents, kept as separate entries."
+        action={<button onClick={() => setEditing({})} className="btn-primary"><Plus size={16} /> Add record</button>}
       />
-
-      <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">These entries are fictional sample data and are not part of your account. Your uploaded files are in the Documents library.</p>
+      {error && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
+      {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
+      {isDemoAccount && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Demo sample records are included for exploring CareVault. Add or edit your own entries here.</p>}
+      {editing && <form onSubmit={submitRecord} className="card mb-5 grid gap-3 p-5 sm:grid-cols-2">
+        <label className="text-xs font-semibold">Title<input required maxLength="180" name="title" defaultValue={editing.title || ''} className="field mt-1" /></label>
+        <label className="text-xs font-semibold">Category<select name="category" defaultValue={editing.category || 'Other'} className="field mt-1">{['Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'].map((item) => <option key={item}>{item}</option>)}</select></label>
+        <label className="text-xs font-semibold">Provider or hospital (optional)<input maxLength="180" name="provider" defaultValue={editing.provider || ''} className="field mt-1" /></label>
+        <label className="text-xs font-semibold">Medical event date (optional)<input type="date" name="eventDate" defaultValue={editing.eventDate ? editing.eventDate.slice(0, 10) : ''} className="field mt-1" /></label>
+        <label className="text-xs font-semibold sm:col-span-2">Notes (optional)<textarea maxLength="5000" name="notes" defaultValue={editing.notes || ''} className="field mt-1" rows="3" /></label>
+        <label className="text-xs font-semibold sm:col-span-2">Link an uploaded document (optional)<select name="documentId" defaultValue={editing.documentId || ''} className="field mt-1"><option value="">No linked document</option>{documents.map((d) => <option key={d.id} value={d.id}>{d.title}</option>)}</select></label>
+        <div className="flex gap-2 sm:col-span-2"><button disabled={saving} className="btn-primary">{saving ? 'Saving…' : 'Save record'}</button><button type="button" onClick={() => setEditing(null)} className="btn-secondary">Cancel</button></div>
+      </form>}
       <div className="mb-4 flex flex-col gap-3 sm:flex-row">
         <label className="relative flex-1">
           <Search size={17} className="absolute left-3 top-3 text-slate-400" />
@@ -66,7 +92,7 @@ export function RecordsPage({ role = 'patient' }) {
         <label className="relative">
           <span className="sr-only">Filter by record type</span>
           <select value={category} onChange={(e) => setCategory(e.target.value)} className="field h-full sm:w-48">
-            {['All types', ...new Set(records.map((record) => record.type))].map((type) => <option key={type}>{type}</option>)}
+            {['All types', 'Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'].map((type) => <option key={type}>{type}</option>)}
           </select>
         </label>
       </div>
@@ -76,41 +102,41 @@ export function RecordsPage({ role = 'patient' }) {
           <span>Record</span>
           <span>Category</span>
           <span>Date added</span>
-          <span>Status</span>
+          <span>Actions</span>
         </div>
 
-        {visible.length ? (
-          displayRows.map((r) => (
+        {loading ? <div role="status" className="p-6 text-sm text-slate-500">Loading your saved records…</div> : visibleRecords.length || visibleDocuments.length ? (
+          <>
+          {visibleRecords.map((r) => (
             <div
-              key={r.title}
+              key={`record-${r.id}`}
               className="grid grid-cols-1 gap-3 border-b border-slate-100 px-5 py-4 last:border-0 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_100px] sm:items-center sm:gap-4"
             >
               <div className="flex min-w-0 items-center gap-3">
-                <RecordIcon lab={r.lab} />
+                <RecordIcon lab={r.category === 'Lab result'} />
                 <div className="min-w-0">
                   <p className="truncate text-sm font-semibold">{r.title}</p>
-                  <p className="truncate text-xs text-slate-400">{r.provider}</p>
+                  <p className="truncate text-xs text-slate-400">Medical record{r.provider ? ` · ${r.provider}` : ''}</p>
+                  {r.document && <p className="truncate text-xs text-teal">Linked document: {r.document.title}</p>}
                 </div>
               </div>
-              <span className="text-xs text-slate-500 sm:block">{r.type}</span>
-              <span className="text-xs text-slate-500">{r.date}</span>
-              <span>
-                <StatusBadge tone={r.status === 'Private' ? 'gray' : 'green'}>
-                  {r.status}
-                </StatusBadge>
-              </span>
+              <span className="text-xs text-slate-500 sm:block">{r.category}</span>
+              <span className="text-xs text-slate-500">{r.eventDate ? new Date(r.eventDate).toLocaleDateString() : 'No event date'}</span>
+              <span className="flex gap-2"><button onClick={() => setEditing(r)} className="text-xs font-semibold text-teal">Edit</button><button onClick={() => deleteRecord(r)} className="text-xs text-rose-700">Delete</button></span>
             </div>
-          ))
+          ))}
+          {visibleDocuments.map((d) => <div key={`document-${d.id}`} className="grid grid-cols-1 gap-3 border-b border-slate-100 px-5 py-4 last:border-0 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_100px] sm:items-center sm:gap-4"><div className="flex min-w-0 items-center gap-3"><RecordIcon lab={d.fileType === 'application/pdf'} /><div className="min-w-0"><p className="truncate text-sm font-semibold">{d.title}</p><p className="text-xs text-slate-400">Uploaded document</p></div></div><span className="text-xs text-slate-500">{d.category || 'Document'}</span><span className="text-xs text-slate-500">{new Date(d.uploadedAt).toLocaleDateString()}</span><Link to="/documents" className="text-xs font-semibold text-teal">Open document</Link></div>)}
+          </>
         ) : (
           <div className="p-6">
-            <EmptyState title="No matching records" text="Try another search term." />
+            <EmptyState title={records.length || documents.length ? 'No matching records' : 'No records yet'} text={records.length || documents.length ? 'Try another search term or category.' : 'Add a medical record or upload a document to get started.'} />
           </div>
         )}
       </div>
 
       <div className="mt-4 flex items-center gap-2 text-xs text-slate-400">
         <ShieldCheck size={14} className="text-teal" />
-        {role === 'doctor' ? 'This sample list represents patient-shared records in the demo.' : 'Private records stay private in this demo. Sharing is managed per connection.'}
+        {'Medical records and documents are shown as separate saved items.'}
       </div>
     </AppShell>
   )
@@ -118,25 +144,26 @@ export function RecordsPage({ role = 'patient' }) {
 
 export function TimelinePage({ role = 'patient' }) {
   const [selected, setSelected] = useState(['Visits', 'Lab results', 'Medications', 'Documents'])
-  const visibleTimeline = timeline.filter((event) => {
-    const category = event.kind === 'Visit' ? 'Visits' : event.kind === 'Lab result' ? 'Lab results' : event.kind === 'Medication' ? 'Medications' : 'Documents'
-    return selected.includes(category)
-  })
+  const [events, setEvents] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [isDemoAccount, setIsDemoAccount] = useState(false)
+  useEffect(() => { const controller = new AbortController(); fetchTimeline(controller.signal).then((payload) => { setEvents(payload.events); setIsDemoAccount(payload.isDemoAccount) }).catch((e) => { if (e.name !== 'AbortError') setError(e.message) }).finally(() => setLoading(false)); return () => controller.abort() }, [])
+  const typeFor = (event) => event.source === 'document' ? 'Documents' : event.category === 'Visit summary' ? 'Visits' : event.category === 'Lab result' ? 'Lab results' : event.category === 'Medication' || event.category === 'Prescription' ? 'Medications' : event.category
+  const visibleTimeline = events.filter((event) => selected.includes(typeFor(event))).sort((a, b) => new Date(b.date) - new Date(a.date))
   return (
     <AppShell role={role}>
       <PageHeading
         eyebrow="YOUR HEALTH HISTORY"
         title="Health timeline"
-        subtitle="Prototype timeline using sample events. It is not generated from your records or saved to your account."
+        subtitle="Events from your saved records and uploaded documents."
         action={<span className="rounded-full bg-white px-3 py-2 text-xs font-medium text-slate-500">{visibleTimeline.length} events shown</span>}
       />
 
-      <p className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-900">The events below are fictional examples. Uploads are stored separately in your private Documents library.</p>
+      {error && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
+      {isDemoAccount && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">This demo timeline includes sample dates and records for exploring CareVault.</p>}
       <div className="grid gap-6 lg:grid-cols-[1fr_290px]">
         <div className="card p-5 sm:p-7">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
             <div>
-              <p className="text-sm font-semibold">2026</p>
+              <p className="text-sm font-semibold">Chronological events</p>
               <p className="mt-1 text-xs text-slate-400">{visibleTimeline.length} events · most recent first</p>
             </div>
             <span className="rounded-full bg-mint px-3 py-1 text-xs font-semibold text-teal">
@@ -145,30 +172,31 @@ export function TimelinePage({ role = 'patient' }) {
           </div>
 
           <div className="pt-5">
-            {visibleTimeline.map((event, index) => (
-              <div key={event.title} className="relative flex gap-4 pb-7 last:pb-0">
+            {loading ? <div role="status" className="py-8 text-center text-sm text-slate-500">Loading your timeline…</div> : visibleTimeline.length === 0 ? <EmptyState title="No timeline events" text={events.length ? 'There are no events in the selected filters.' : 'Medical records with event dates and uploaded documents will appear here.'} /> : visibleTimeline.map((event, index) => (
+              <div key={event.id} className="relative flex gap-4 pb-7 last:pb-0">
                 <div className="flex flex-col items-center">
                   <span className="mt-1 grid h-9 w-9 place-items-center rounded-xl bg-slate-50 text-teal">
-                    {event.kind === 'Visit' ? <UsersRound size={17} /> : <FlaskConical size={17} />}
+                    {event.source === 'document' ? <FileText size={17} /> : event.category === 'Visit summary' ? <UsersRound size={17} /> : <FlaskConical size={17} />}
                   </span>
-                  {index < timeline.length - 1 && (
+                  {index < visibleTimeline.length - 1 && (
                     <span className="mt-2 h-full w-px bg-slate-200" />
                   )}
                 </div>
                 <div className="flex-1 rounded-xl border border-slate-100 p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="text-[10px] font-bold tracking-widest text-slate-400">
-                      {event.month}
+                      {new Date(event.date).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · {event.dateType}
                     </p>
                     <span
                       className={`rounded-full px-2.5 py-1 text-[10px] font-semibold ${event.color}`}
                     >
-                      {event.kind}
+                      {event.source === 'document' ? 'Document' : event.category}
                     </span>
                   </div>
                   <h3 className="mt-2 text-sm font-semibold">{event.title}</h3>
-                  <p className="mt-1 text-xs text-slate-500">{event.place}</p>
-                  <Link to={role === 'doctor' ? '/doctor/records' : '/records'} className="mt-3 inline-block text-xs font-semibold text-teal hover:underline">View related records →</Link>
+                  {event.provider && <p className="mt-1 text-xs text-slate-500">{event.provider}</p>}
+                  {event.notes && <p className="mt-2 text-xs text-slate-600">{event.notes}</p>}
+                  <Link to={event.source === 'document' ? '/documents' : '/records'} className="mt-3 inline-block text-xs font-semibold text-teal hover:underline">View {event.source === 'document' ? 'document' : 'record'} →</Link>
                 </div>
               </div>
             ))}
@@ -179,11 +207,11 @@ export function TimelinePage({ role = 'patient' }) {
           <p className="font-semibold">Timeline filters</p>
           <p className="mt-1 text-xs text-slate-500">Choose which events to show.</p>
           <div className="mt-5 space-y-3">
-            {['Visits', 'Lab results', 'Medications', 'Documents'].map((name, i) => (
+            {['Visits', 'Lab results', 'Medications', 'Imaging', 'Other', 'Documents'].map((name) => (
               <label key={name} className="flex items-center gap-2.5 text-sm text-slate-600">
                 <input type="checkbox" checked={selected.includes(name)} onChange={() => setSelected((current) => current.includes(name) ? current.filter((item) => item !== name) : [...current, name])} className="accent-teal" />
                 {name}
-                <span className="ml-auto text-xs text-slate-400">{[2, 2, 0, 4][i]}</span>
+                <span className="ml-auto text-xs text-slate-400">{events.filter((event) => typeFor(event) === name).length}</span>
               </label>
             ))}
           </div>
@@ -209,6 +237,8 @@ export function DocumentsPage({ role = 'patient' }) {
   const [now, setNow] = useState(Date.now())
   const [preview, setPreview] = useState(null)
   const [openingDocumentId, setOpeningDocumentId] = useState('')
+  const [uploadCategory, setUploadCategory] = useState('')
+  const [uploadEventDate, setUploadEventDate] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
@@ -279,7 +309,7 @@ export function DocumentsPage({ role = 'patient' }) {
     setUploading(true)
     setProgress(0)
     try {
-      const document = await uploadDocument(file, setProgress)
+      const document = await uploadDocument(file, setProgress, { category: uploadCategory, eventDate: uploadEventDate })
       setDocuments((current) => [document, ...current])
       setNotice('Document uploaded successfully.')
     } catch (error) {
@@ -359,6 +389,7 @@ export function DocumentsPage({ role = 'patient' }) {
       />}
 
 
+      {role !== 'doctor' && <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">Document category (optional)<select value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)} className="field mt-1"><option value="">Uncategorized</option>{['Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'].map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-xs font-semibold text-slate-600">Medical event date (optional)<input type="date" value={uploadEventDate} onChange={(e) => setUploadEventDate(e.target.value)} className="field mt-1" /></label></div>}
       {role !== 'doctor' && <button
         type="button"
         disabled={uploading || loading}
@@ -381,6 +412,7 @@ export function DocumentsPage({ role = 'patient' }) {
       </button>}
 
       {role !== 'doctor' && uploading && <div className="mb-6 rounded-xl border border-teal/15 bg-white p-4" role="status" aria-live="polite"><div className="flex items-center justify-between text-xs"><span className="font-medium text-slate-700">{progress === 100 ? 'Saving to document storage…' : 'Sending file…'}</span><span className="tabular-nums text-slate-500">{progress}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-teal transition-[width]" style={{ width: progress + '%' }}/></div></div>}
+      {role !== 'doctor' && documents.some((document) => document.isDemoSample) && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Sample documents are included in the demo account. Other accounts only show documents they upload.</p>}
       {role !== 'doctor' && uploadError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{uploadError}</p>}
       {pageError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{pageError}</p>}
       {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}

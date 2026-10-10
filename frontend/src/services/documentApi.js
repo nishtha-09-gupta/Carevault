@@ -25,9 +25,11 @@ export async function fetchDocuments(signal) {
   return payload.documents
 }
 
-export async function uploadDocument(file, onProgress) {
+export async function uploadDocument(file, onProgress, metadata = {}) {
   const data = new FormData()
   data.append('document', file)
+  if (metadata.category) data.append('category', metadata.category)
+  if (metadata.eventDate) data.append('eventDate', metadata.eventDate)
 
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest()
