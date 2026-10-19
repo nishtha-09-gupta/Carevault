@@ -1,7 +1,9 @@
+import { apiUrl } from './apiUrl'
+
 async function request(path, options = {}) {
-  const response = await fetch('/api/access' + path, {
+  const response = await fetch(apiUrl('/api/access' + path), {
     ...options,
-    credentials: 'same-origin',
+    credentials: 'include',
     headers: options.body ? { 'Content-Type': 'application/json', ...options.headers } : options.headers,
   })
   const payload = await response.json().catch(() => ({}))
@@ -20,14 +22,14 @@ export async function fetchAccessGrants() {
 }
 
 export async function fetchDoctorPatients() {
-  const response = await fetch('/api/doctor/patients', { credentials: 'same-origin' })
+  const response = await fetch(apiUrl('/api/doctor/patients'), { credentials: 'include' })
   const payload = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(payload.error || 'The patient list could not be loaded.')
   return payload.patients
 }
 
 export async function fetchDoctorPatientAccess(patientId) {
-  const response = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}`, { credentials: 'same-origin' })
+  const response = await fetch(apiUrl(`/api/doctor/patients/${encodeURIComponent(patientId)}`), { credentials: 'include' })
   const payload = await response.json().catch(() => ({}))
   // An already-running API process may predate the newer detail route. The
   // patient list endpoint is older and still returns only active grants.
@@ -52,12 +54,12 @@ export async function revokeDoctorAccess(grantId) {
 }
 
 async function patientDocumentsRequest(patientId, suffix = '') {
-  let response = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}/documents${suffix}`, { credentials: 'same-origin' })
+  let response = await fetch(apiUrl(`/api/doctor/patients/${encodeURIComponent(patientId)}/documents${suffix}`), { credentials: 'include' })
   if (response.status === 404) {
     const payload = await response.clone().json().catch(() => ({}))
     if (payload.error === 'API route not found.') {
       // Legacy route performs the same doctor, patient, owner, and expiry checks.
-      response = await fetch(`/api/patients/${encodeURIComponent(patientId)}/documents${suffix}`, { credentials: 'same-origin' })
+      response = await fetch(apiUrl(`/api/patients/${encodeURIComponent(patientId)}/documents${suffix}`), { credentials: 'include' })
     }
   }
   if (!response.ok) {
@@ -79,7 +81,7 @@ export async function fetchPatientDocumentFile(patientId, documentId) {
 }
 
 export async function fetchPatientHealthIntake(patientId) {
-  const response = await fetch(`/api/doctor/patients/${encodeURIComponent(patientId)}/intake`, { credentials: 'same-origin' })
+  const response = await fetch(apiUrl(`/api/doctor/patients/${encodeURIComponent(patientId)}/intake`), { credentials: 'include' })
   const body = await response.json().catch(() => ({}))
   if (!response.ok) throw new Error(body.error || 'Could not load the patient health intake.')
   return body.intake

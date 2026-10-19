@@ -3,6 +3,8 @@ dist/
 .env
 .env.*
 !.env.example
+!backend/.env.example
+!frontend/.env.example
 backend/.env
 .DS_Store
 backend/node_modules/

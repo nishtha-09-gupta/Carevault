@@ -34,10 +34,12 @@ export function verifySession(token) {
 
 export function setSessionCookie(res, token) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-  res.setHeader('Set-Cookie', `${COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${SESSION_SECONDS}${secure}`)
+  const sameSite = process.env.NODE_ENV === 'production' ? 'None' : 'Lax'
+  res.setHeader('Set-Cookie', `${COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; Path=/; SameSite=${sameSite}; Max-Age=${SESSION_SECONDS}${secure}`)
 }
 
 export function clearSessionCookie(res) {
   const secure = process.env.NODE_ENV === 'production' ? '; Secure' : ''
-  res.setHeader('Set-Cookie', `${COOKIE_NAME}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0${secure}`)
+  const sameSite = process.env.NODE_ENV === 'production' ? 'None' : 'Lax'
+  res.setHeader('Set-Cookie', `${COOKIE_NAME}=; HttpOnly; Path=/; SameSite=${sameSite}; Max-Age=0${secure}`)
 }

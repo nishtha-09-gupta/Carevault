@@ -1,7 +1,9 @@
+import { apiUrl } from './apiUrl'
+
 async function request(path, options = {}) {
-  const response = await fetch('/api/medical-records' + path, {
+  const response = await fetch(apiUrl('/api/medical-records' + path), {
     ...options,
-    credentials: 'same-origin',
+    credentials: 'include',
     headers: options.body ? { 'Content-Type': 'application/json', ...options.headers } : options.headers,
   })
   const payload = await response.json().catch(() => ({}))

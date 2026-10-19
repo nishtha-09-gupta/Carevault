@@ -1,4 +1,6 @@
-const DOCUMENTS_URL = '/api/documents'
+import { apiUrl } from './apiUrl'
+
+const DOCUMENTS_URL = apiUrl('/api/documents')
 
 async function readJson(response) {
   const payload = await response.json().catch(() => ({}))
@@ -10,7 +12,7 @@ async function readJson(response) {
 
 async function apiRequest(url, options) {
   try {
-    return await readJson(await fetch(url, options))
+    return await readJson(await fetch(url, { credentials: 'include', ...options }))
   } catch (error) {
     if (error.name === 'AbortError') throw error
     if (error instanceof TypeError) {
@@ -34,6 +36,7 @@ export async function uploadDocument(file, onProgress, metadata = {}) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest()
     request.open('POST', DOCUMENTS_URL)
+    request.withCredentials = true
     request.responseType = 'json'
     request.timeout = 120000
     request.upload.addEventListener('progress', (event) => {
@@ -62,7 +65,7 @@ export async function fetchDocument(id) {
 export async function fetchDocumentFile(id) {
   let response
   try {
-    response = await fetch(`${DOCUMENTS_URL}/${encodeURIComponent(id)}/file`, { credentials: 'same-origin' })
+    response = await fetch(`${DOCUMENTS_URL}/${encodeURIComponent(id)}/file`, { credentials: 'include' })
   } catch (error) {
     if (error instanceof TypeError) throw new Error('Could not reach the CareVault API. Start the backend and check its MongoDB connection.')
     throw error

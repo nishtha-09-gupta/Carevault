@@ -1,4 +1,5 @@
 import { verifySession } from '../services/session.js'
+import { isDemoAccountEmail } from '../services/demoSeed.js'
 import User from '../models/User.js'
 
 export async function authenticate(req, res, next) {
@@ -17,6 +18,9 @@ export async function authenticate(req, res, next) {
   try {
     const user = await User.findById(payload.sub).select('_id name email role +sessionVersion')
     if (!user) return res.status(401).json({ error: 'Your session is no longer valid. Please log in again.' })
+    if (process.env.NODE_ENV === 'production' && isDemoAccountEmail(user.email)) {
+      return res.status(401).json({ error: 'This demo account is not available in production.' })
+    }
     if ((payload.ver || 0) !== user.sessionVersion) return res.status(401).json({ error: 'Your session has ended. Please log in again.' })
     req.user = { id: user.id, name: user.name, email: user.email, role: user.role, sessionVersion: user.sessionVersion }
     return next()

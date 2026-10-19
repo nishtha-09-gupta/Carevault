@@ -664,7 +664,7 @@ export function AuthPage({ mode = 'login' }) {
             </p>
           </form>
 
-          {!signup && <div className="mt-4 border-t border-slate-100 pt-4">
+          {!signup && import.meta.env.DEV && <div className="mt-4 border-t border-slate-100 pt-4">
             <p className="mb-3 text-center text-sm font-semibold">Want to explore CareVault?</p>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => fillDemoCredentials('patient')} className="btn-secondary justify-center !px-2 text-xs">Use demo patient</button>

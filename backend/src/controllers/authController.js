@@ -15,7 +15,7 @@ import {
   RESET_RESEND_COOLDOWN_MS,
   isResetSecretUnexpired,
 } from '../services/passwordReset.js'
-import { refreshExpiredDemoAccessForLogin } from '../services/demoSeed.js'
+import { isDemoAccountEmail, refreshExpiredDemoAccessForLogin } from '../services/demoSeed.js'
 
 const scrypt = promisify(scryptCallback)
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -56,6 +56,9 @@ export async function register(req, res) {
 export async function login(req, res) {
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   const password = typeof req.body.password === 'string' ? req.body.password : ''
+  if (process.env.NODE_ENV === 'production' && isDemoAccountEmail(email)) {
+    return res.status(401).json({ error: 'Email or password is incorrect.' })
+  }
   if (!isValidPassword(password)) return res.status(401).json({ error: 'Email or password is incorrect.' })
   const user = await User.findOne({ email }).select('+passwordHash +passwordSalt +sessionVersion')
   if (!user) return res.status(401).json({ error: 'Email or password is incorrect.' })

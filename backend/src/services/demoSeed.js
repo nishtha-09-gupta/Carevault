@@ -7,6 +7,7 @@ import { ensureDemoPatientDocuments } from './demoPatientData.js'
 const scrypt = promisify(scryptCallback)
 const DEMO_PATIENT = { email: 'demo@gmail.com', password: 'demo123', name: 'Shikha Sharma', role: 'patient' }
 const DEMO_DOCTOR = { email: 'doctor.demo@gmail.com', password: 'doctor123', name: 'Dr. Anika Sharma', role: 'doctor' }
+const DEMO_EMAILS = new Set([DEMO_PATIENT.email, DEMO_DOCTOR.email])
 const LEGACY_DEMO_EMAIL = 'demo@carevault.invalid'
 const DEMO_GRANT_HOURS = 24 * 30
 
@@ -91,7 +92,7 @@ export async function seedDemoAccounts() {
 }
 
 export async function refreshExpiredDemoAccessForLogin(user) {
-  if (!user || ![DEMO_PATIENT.email, DEMO_DOCTOR.email].includes(user.email)) return
+  if (!user || !DEMO_EMAILS.has(user.email)) return
   const patient = await User.findOne({ email: DEMO_PATIENT.email, role: 'patient' }).select('_id')
   const doctor = await User.findOne({ email: DEMO_DOCTOR.email, role: 'doctor' }).select('_id')
   if (!patient || !doctor) return
@@ -101,4 +102,8 @@ export async function refreshExpiredDemoAccessForLogin(user) {
   grant.grantedAt = new Date()
   grant.expiresAt = new Date(Date.now() + DEMO_GRANT_HOURS * 60 * 60 * 1000)
   await grant.save()
+}
+
+export function isDemoAccountEmail(email) {
+  return DEMO_EMAILS.has(email)
 }
