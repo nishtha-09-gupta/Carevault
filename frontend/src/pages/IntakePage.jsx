@@ -3,6 +3,7 @@ import { Check, ClipboardList, Info, LoaderCircle, Save } from 'lucide-react'
 import AppShell from '../components/AppShell'
 import { PageHeading } from '../components/UI'
 import { fetchHealthIntake, saveHealthIntake } from '../services/healthIntakeApi'
+import { useAuth } from '../components/AuthContext'
 
 const emptyFields = {
   mainConcern: '',
@@ -14,6 +15,8 @@ const emptyFields = {
 }
 
 export default function IntakePage({ role = 'patient' }) {
+  const { user } = useAuth()
+  const isDemo = Boolean(user?.isDemo)
   const [fields, setFields] = useState(emptyFields)
   const [intake, setIntake] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -83,6 +86,7 @@ export default function IntakePage({ role = 'patient' }) {
       />
 
       {loading && <p role="status" className="mb-4 inline-flex items-center gap-2 text-sm text-slate-500"><LoaderCircle size={16} className="animate-spin"/>Loading saved intake…</p>}
+      {isDemo && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Demo accounts are read-only. Any sample intake shown here is fictional.</p>}
       {!loading && !intake && !error && <p role="status" className="mb-4 text-sm text-slate-500">You haven’t saved a health intake yet.</p>}
       {intake && <p className="mb-4 text-xs text-slate-500">{intake.status === 'draft' ? 'Draft saved' : 'Last saved'} {new Date(intake.updatedAt).toLocaleString()}</p>}
       {error && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
@@ -109,17 +113,18 @@ export default function IntakePage({ role = 'patient' }) {
               maxLength={2000}
               value={fields.mainConcern}
               onChange={updateField}
+              readOnly={isDemo}
               placeholder="For example: headaches that started last week..."
             />
 
             <div className="mt-4 grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="startedAt" className="mb-1.5 block text-sm font-medium">When did it begin?</label>
-                <input id="startedAt" name="startedAt" className="field" type="date" value={fields.startedAt} onChange={updateField} />
+                <input id="startedAt" name="startedAt" className="field" type="date" value={fields.startedAt} onChange={updateField} readOnly={isDemo} />
               </div>
               <div>
                 <label htmlFor="impact" className="mb-1.5 block text-sm font-medium">How much does it affect you?</label>
-                <select id="impact" name="impact" className="field" value={fields.impact} onChange={updateField}>
+                <select id="impact" name="impact" className="field" value={fields.impact} onChange={updateField} disabled={isDemo}>
                   <option value="">Select impact</option>
                   <option>Mild</option>
                   <option>Moderate</option>
@@ -136,21 +141,21 @@ export default function IntakePage({ role = 'patient' }) {
             <div className="mt-5 grid gap-4 sm:grid-cols-2">
               <div>
                 <label htmlFor="allergies" className="mb-1.5 block text-sm font-medium">Known allergies</label>
-                <input id="allergies" name="allergies" className="field" maxLength={2000} value={fields.allergies} onChange={updateField} placeholder="e.g. Penicillin, seasonal pollen" />
+                <input id="allergies" name="allergies" className="field" maxLength={2000} value={fields.allergies} onChange={updateField} placeholder="e.g. Penicillin, seasonal pollen" readOnly={isDemo} />
               </div>
               <div>
                 <label htmlFor="medications" className="mb-1.5 block text-sm font-medium">Current medications</label>
-                <input id="medications" name="medications" className="field" maxLength={2000} value={fields.medications} onChange={updateField} placeholder="Medication and dosage" />
+                <input id="medications" name="medications" className="field" maxLength={2000} value={fields.medications} onChange={updateField} placeholder="Medication and dosage" readOnly={isDemo} />
               </div>
             </div>
 
             <div className="mt-4">
               <label htmlFor="additionalNotes" className="mb-1.5 block text-sm font-medium">Anything else your care team should know?</label>
-              <textarea id="additionalNotes" name="additionalNotes" className="field min-h-24 resize-y" maxLength={5000} value={fields.additionalNotes} onChange={updateField} placeholder="Optional context, questions, or relevant history" />
+              <textarea id="additionalNotes" name="additionalNotes" className="field min-h-24 resize-y" maxLength={5000} value={fields.additionalNotes} onChange={updateField} placeholder="Optional context, questions, or relevant history" readOnly={isDemo} />
             </div>
           </section>
 
-          <div className="flex flex-wrap items-center gap-3">
+          {!isDemo && <div className="flex flex-wrap items-center gap-3">
             <button className="btn-primary" disabled={loading || saving}>
               {saving ? <LoaderCircle size={16} className="animate-spin"/> : <Save size={16} />} {intake?.status === 'submitted' ? 'Update intake' : 'Save intake'}
             </button>
@@ -158,7 +163,7 @@ export default function IntakePage({ role = 'patient' }) {
               Save as draft
             </button>
             {notice && <span role="status" className="inline-flex items-center gap-1.5 text-sm font-medium text-teal"><Check size={16} />{notice}</span>}
-          </div>
+          </div>}
         </form>
 
         <aside className="space-y-4">

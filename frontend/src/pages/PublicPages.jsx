@@ -556,9 +556,17 @@ export function AuthPage({ mode = 'login' }) {
     }
   }
 
-  const fillDemoCredentials = (account) => {
-    setEmail(account === 'doctor' ? 'doctor.demo@gmail.com' : 'demo@gmail.com')
-    setPassword(account === 'doctor' ? 'doctor123' : 'demo123')
+  const openDemo = async (account) => {
+    setError('')
+    setSubmitting(true)
+    try {
+      const user = await auth.demoSignIn(account)
+      navigate(user.role === 'doctor' ? '/doctor' : '/patient', { replace: true })
+    } catch (requestError) {
+      setError(requestError.message)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -664,13 +672,13 @@ export function AuthPage({ mode = 'login' }) {
             </p>
           </form>
 
-          {!signup && import.meta.env.DEV && <div className="mt-4 border-t border-slate-100 pt-4">
+          {!signup && <div className="mt-4 border-t border-slate-100 pt-4">
             <p className="mb-3 text-center text-sm font-semibold">Want to explore CareVault?</p>
             <div className="grid grid-cols-2 gap-2">
-              <button type="button" onClick={() => fillDemoCredentials('patient')} className="btn-secondary justify-center !px-2 text-xs">Use demo patient</button>
-              <button type="button" onClick={() => fillDemoCredentials('doctor')} className="btn-secondary justify-center !px-2 text-xs">Use demo doctor</button>
+              <button type="button" disabled={submitting} onClick={() => openDemo('patient')} className="btn-secondary justify-center !px-2 text-xs disabled:opacity-50">Demo Patient</button>
+              <button type="button" disabled={submitting} onClick={() => openDemo('doctor')} className="btn-secondary justify-center !px-2 text-xs disabled:opacity-50">Demo Doctor</button>
             </div>
-            <p className="mt-2 text-center text-xs text-slate-400">Credentials fill the form; log in to continue.</p>
+            <p className="mt-2 text-center text-xs text-slate-400">Explore fictional sample records in read-only demo accounts.</p>
           </div>}
 
           <p className="mt-5 text-center text-sm text-slate-500">

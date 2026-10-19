@@ -15,7 +15,7 @@ import {
   RESET_RESEND_COOLDOWN_MS,
   isResetSecretUnexpired,
 } from '../services/passwordReset.js'
-import { isDemoAccountEmail, refreshExpiredDemoAccessForLogin } from '../services/demoSeed.js'
+import { demoAccessEnabled, DEMO_IDENTITIES, isDemoAccountEmail } from '../services/demoSeed.js'
 
 const scrypt = promisify(scryptCallback)
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -23,7 +23,18 @@ const RESET_REQUEST_MESSAGE = 'If an account exists for that email, a verificati
 const INVALID_RESET_MESSAGE = 'That verification code is invalid or expired. Request a new code and try again.'
 
 function publicUser(user) {
-  return { id: user.id, name: user.name, email: user.email, role: user.role }
+  return { id: user.id, name: user.name, email: user.email, role: user.role, isDemo: Boolean(user.demoRole) }
+}
+
+export async function demoLogin(req, res) {
+  const role = req.body?.role
+  if (!demoAccessEnabled() || !['patient', 'doctor'].includes(role)) return res.status(404).json({ error: 'Demo access is unavailable.' })
+  const identity = DEMO_IDENTITIES[role]
+  const user = await User.findOne({ email: identity.email, role, demoRole: role }).select('+sessionVersion +demoRole +demoPartnerId')
+  if (!user) return res.status(503).json({ error: 'Demo access is not configured.' })
+  if (role === 'doctor' && !user.demoPartnerId) return res.status(503).json({ error: 'Demo access is not configured.' })
+  setSessionCookie(res, createSession(user.id, user.sessionVersion))
+  return res.json({ user: publicUser(user) })
 }
 
 async function passwordDigest(password, salt) {
@@ -56,16 +67,16 @@ export async function register(req, res) {
 export async function login(req, res) {
   const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : ''
   const password = typeof req.body.password === 'string' ? req.body.password : ''
-  if (process.env.NODE_ENV === 'production' && isDemoAccountEmail(email)) {
+  if (isDemoAccountEmail(email)) {
     return res.status(401).json({ error: 'Email or password is incorrect.' })
   }
   if (!isValidPassword(password)) return res.status(401).json({ error: 'Email or password is incorrect.' })
-  const user = await User.findOne({ email }).select('+passwordHash +passwordSalt +sessionVersion')
+  const user = await User.findOne({ email }).select('+passwordHash +passwordSalt +sessionVersion +demoRole')
   if (!user) return res.status(401).json({ error: 'Email or password is incorrect.' })
+  if (user.demoRole) return res.status(401).json({ error: 'Email or password is incorrect.' })
   const expected = Buffer.from(user.passwordHash, 'hex')
   const supplied = Buffer.from(await passwordDigest(password, user.passwordSalt), 'hex')
   if (expected.length !== supplied.length || !timingSafeEqual(expected, supplied)) return res.status(401).json({ error: 'Email or password is incorrect.' })
-  await refreshExpiredDemoAccessForLogin(user)
   setSessionCookie(res, createSession(user.id, user.sessionVersion))
   return res.json({ user: publicUser(user) })
 }
@@ -83,8 +94,9 @@ export async function requestPasswordReset(req, res) {
     return res.status(503).json({ error: 'Password reset email is temporarily unavailable. Please try again later.' })
   }
 
-  const user = await User.findOne({ email }).select('+resetOtpSentAt')
+  const user = await User.findOne({ email }).select('+resetOtpSentAt +demoRole')
   if (!user) return res.json({ message: RESET_REQUEST_MESSAGE })
+  if (user.demoRole || isDemoAccountEmail(email)) return res.json({ message: RESET_REQUEST_MESSAGE })
 
   const now = new Date()
   const cutoff = new Date(now.getTime() - RESET_RESEND_COOLDOWN_MS)
@@ -130,8 +142,8 @@ export async function verifyPasswordResetOtp(req, res) {
     return res.status(400).json({ error: INVALID_RESET_MESSAGE })
   }
 
-  const user = await User.findOne({ email }).select('+resetOtpHash +resetOtpExpiresAt +resetOtpAttempts')
-  if (!user || !user.resetOtpHash || !isResetSecretUnexpired(user.resetOtpExpiresAt)) {
+  const user = await User.findOne({ email }).select('+resetOtpHash +resetOtpExpiresAt +resetOtpAttempts +demoRole')
+  if (!user || user.demoRole || !user.resetOtpHash || !isResetSecretUnexpired(user.resetOtpExpiresAt)) {
     return res.status(400).json({ error: INVALID_RESET_MESSAGE })
   }
 
@@ -176,8 +188,8 @@ export async function resetPassword(req, res) {
     return res.status(400).json({ error: INVALID_RESET_MESSAGE })
   }
 
-  const user = await User.findOne({ email }).select('+resetGrantHash +resetGrantExpiresAt')
-  if (!user || !user.resetGrantHash || !isResetSecretUnexpired(user.resetGrantExpiresAt)) {
+  const user = await User.findOne({ email }).select('+resetGrantHash +resetGrantExpiresAt +demoRole')
+  if (!user || user.demoRole || !user.resetGrantHash || !isResetSecretUnexpired(user.resetGrantExpiresAt)) {
     return res.status(400).json({ error: INVALID_RESET_MESSAGE })
   }
   if (!resetSecretMatches(resetToken, user.resetGrantHash)) {
@@ -211,5 +223,6 @@ export async function logout(req, res) {
 }
 
 export function currentUser(req, res) {
-  return res.json({ user: req.user })
+  const { id, name, email, role, isDemo } = req.user
+  return res.json({ user: { id, name, email, role, isDemo } })
 }

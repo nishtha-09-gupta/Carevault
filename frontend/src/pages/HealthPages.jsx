@@ -17,6 +17,7 @@ import DocumentPreview from '../components/DocumentPreview'
 import { EmptyState, PageHeading, RecordIcon, StatusBadge } from '../components/UI'
 import { fetchDocumentFile, fetchDocuments, removeDocument, uploadDocument } from '../services/documentApi'
 import { fetchAccessGrants, fetchDoctorPatients, fetchPatientDocumentFile, fetchPatientDocuments } from '../services/accessApi'
+import { useAuth } from '../components/AuthContext'
 import { deleteMedicalRecord, fetchMedicalRecords, fetchTimeline, saveMedicalRecord } from '../services/medicalRecordApi'
 
 const MAX_DOCUMENT_SIZE = 10 * 1024 * 1024
@@ -28,6 +29,8 @@ const DOCUMENT_TYPES = {
 }
 
 export function RecordsPage({ role = 'patient' }) {
+  const { user } = useAuth()
+  const isDemo = Boolean(user?.isDemo)
   const [params, setParams] = useSearchParams()
   const [category, setCategory] = useState('All types')
   const [records, setRecords] = useState([])
@@ -65,11 +68,11 @@ export function RecordsPage({ role = 'patient' }) {
         eyebrow="YOUR HEALTH HISTORY"
         title={role === 'doctor' ? 'Patient records' : 'Medical records'}
         subtitle="Your saved medical records and uploaded documents, kept as separate entries."
-        action={<button onClick={() => setEditing({})} className="btn-primary"><Plus size={16} /> Add record</button>}
+        action={!isDemo && <button onClick={() => setEditing({})} className="btn-primary"><Plus size={16} /> Add record</button>}
       />
       {error && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
       {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
-      {isDemoAccount && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Demo sample records are included for exploring CareVault. Add or edit your own entries here.</p>}
+      {(isDemo || isDemoAccount) && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Fictional demo sample records are shown in read-only mode.</p>}
       {editing && <form onSubmit={submitRecord} className="card mb-5 grid gap-3 p-5 sm:grid-cols-2">
         <label className="text-xs font-semibold">Title<input required maxLength="180" name="title" defaultValue={editing.title || ''} className="field mt-1" /></label>
         <label className="text-xs font-semibold">Category<select name="category" defaultValue={editing.category || 'Other'} className="field mt-1">{['Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'].map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -122,7 +125,7 @@ export function RecordsPage({ role = 'patient' }) {
               </div>
               <span className="text-xs text-slate-500 sm:block">{r.category}</span>
               <span className="text-xs text-slate-500">{r.eventDate ? new Date(r.eventDate).toLocaleDateString() : 'No event date'}</span>
-              <span className="flex gap-2"><button onClick={() => setEditing(r)} className="text-xs font-semibold text-teal">Edit</button><button onClick={() => deleteRecord(r)} className="text-xs text-rose-700">Delete</button></span>
+              <span className="flex gap-2">{!isDemo && <><button onClick={() => setEditing(r)} className="text-xs font-semibold text-teal">Edit</button><button onClick={() => deleteRecord(r)} className="text-xs text-rose-700">Delete</button></>}</span>
             </div>
           ))}
           {visibleDocuments.map((d) => <div key={`document-${d.id}`} className="grid grid-cols-1 gap-3 border-b border-slate-100 px-5 py-4 last:border-0 sm:grid-cols-[minmax(0,2fr)_1fr_1fr_100px] sm:items-center sm:gap-4"><div className="flex min-w-0 items-center gap-3"><RecordIcon lab={d.fileType === 'application/pdf'} /><div className="min-w-0"><p className="truncate text-sm font-semibold">{d.title}</p><p className="text-xs text-slate-400">Uploaded document</p></div></div><span className="text-xs text-slate-500">{d.category || 'Document'}</span><span className="text-xs text-slate-500">{new Date(d.uploadedAt).toLocaleDateString()}</span><Link to="/documents" className="text-xs font-semibold text-teal">Open document</Link></div>)}
@@ -222,6 +225,8 @@ export function TimelinePage({ role = 'patient' }) {
 }
 
 export function DocumentsPage({ role = 'patient' }) {
+  const { user } = useAuth()
+  const isDemo = Boolean(user?.isDemo)
   const input = useRef(null)
   const [documents, setDocuments] = useState([])
   const [sharedPatients, setSharedPatients] = useState([])
@@ -366,7 +371,7 @@ export function DocumentsPage({ role = 'patient' }) {
         eyebrow="DOCUMENT LIBRARY"
         title={role === 'doctor' ? 'Shared patient documents' : 'Documents'}
         subtitle={role === 'doctor' ? 'Documents shared by patients who have granted your account active access.' : 'Upload and manage documents in your private CareVault library.'}
-        action={role !== 'doctor' && (
+        action={role !== 'doctor' && !isDemo && (
           <button disabled={uploading || loading} onClick={() => input.current?.click()} className="btn-primary disabled:cursor-not-allowed disabled:opacity-50">
             <Plus size={16} /> Upload document
           </button>
@@ -380,7 +385,7 @@ export function DocumentsPage({ role = 'patient' }) {
         </select>
       </label>}
 
-      {role !== 'doctor' && <input
+      {role !== 'doctor' && !isDemo && <input
         ref={input}
         type="file"
         accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
@@ -389,8 +394,8 @@ export function DocumentsPage({ role = 'patient' }) {
       />}
 
 
-      {role !== 'doctor' && <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">Document category (optional)<select value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)} className="field mt-1"><option value="">Uncategorized</option>{['Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'].map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-xs font-semibold text-slate-600">Medical event date (optional)<input type="date" value={uploadEventDate} onChange={(e) => setUploadEventDate(e.target.value)} className="field mt-1" /></label></div>}
-      {role !== 'doctor' && <button
+      {role !== 'doctor' && !isDemo && <div className="mb-3 grid gap-3 sm:grid-cols-2"><label className="text-xs font-semibold text-slate-600">Document category (optional)<select value={uploadCategory} onChange={(e) => setUploadCategory(e.target.value)} className="field mt-1"><option value="">Uncategorized</option>{['Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'].map((item) => <option key={item}>{item}</option>)}</select></label><label className="text-xs font-semibold text-slate-600">Medical event date (optional)<input type="date" value={uploadEventDate} onChange={(e) => setUploadEventDate(e.target.value)} className="field mt-1" /></label></div>}
+      {role !== 'doctor' && !isDemo && <button
         type="button"
         disabled={uploading || loading}
         aria-busy={uploading}
@@ -411,7 +416,8 @@ export function DocumentsPage({ role = 'patient' }) {
         </span>
       </button>}
 
-      {role !== 'doctor' && uploading && <div className="mb-6 rounded-xl border border-teal/15 bg-white p-4" role="status" aria-live="polite"><div className="flex items-center justify-between text-xs"><span className="font-medium text-slate-700">{progress === 100 ? 'Saving to document storage…' : 'Sending file…'}</span><span className="tabular-nums text-slate-500">{progress}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-teal transition-[width]" style={{ width: progress + '%' }}/></div></div>}
+      {isDemo && role !== 'doctor' && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Fictional demo documents are shown in read-only mode.</p>}
+      {role !== 'doctor' && !isDemo && uploading && <div className="mb-6 rounded-xl border border-teal/15 bg-white p-4" role="status" aria-live="polite"><div className="flex items-center justify-between text-xs"><span className="font-medium text-slate-700">{progress === 100 ? 'Saving to document storage…' : 'Sending file…'}</span><span className="tabular-nums text-slate-500">{progress}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-teal transition-[width]" style={{ width: progress + '%' }}/></div></div>}
       {role !== 'doctor' && documents.some((document) => document.isDemoSample) && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Sample documents are included in the demo account. Other accounts only show documents they upload.</p>}
       {role !== 'doctor' && uploadError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{uploadError}</p>}
       {pageError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{pageError}</p>}
@@ -429,7 +435,7 @@ export function DocumentsPage({ role = 'patient' }) {
         : pageError && documents.length === 0 ? <div className="card p-8 text-center"><p role="alert" className="text-sm text-rose-700">{pageError}</p><button onClick={() => { setPageError(''); setLoading(true); setReloadCount((count) => count + 1) }} className="btn-secondary mt-4">Try again</button></div>
         : role === 'doctor' && !doctorHasActiveAccess ? null
         : documents.length === 0 ? <EmptyState title={role === 'doctor' ? selectedPatientId ? 'No documents shared' : 'No patient access yet' : 'No documents yet'} text={role === 'doctor' ? 'This patient has not uploaded any documents.' : 'Upload a PDF or image to start your document library.'}/>
-        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{documents.map((document) => <DocumentCard key={document.id} document={document} readOnly={role === 'doctor'} deleting={deletingId === document.id} opening={openingDocumentId === document.id} onOpen={() => openFile(document)} onDelete={() => deleteFile(document)}/>)}</div>}
+        : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{documents.map((document) => <DocumentCard key={document.id} document={document} readOnly={role === 'doctor' || isDemo} deleting={deletingId === document.id} opening={openingDocumentId === document.id} onOpen={() => openFile(document)} onDelete={() => deleteFile(document)}/>)}</div>}
       <DocumentPreview preview={preview} onClose={() => setPreview(null)}/>
     </AppShell>
   )

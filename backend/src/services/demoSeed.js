@@ -2,14 +2,23 @@ import { promisify } from 'node:util'
 import { randomBytes, scrypt as scryptCallback } from 'node:crypto'
 import User from '../models/User.js'
 import AccessGrant from '../models/AccessGrant.js'
-import { ensureDemoPatientDocuments } from './demoPatientData.js'
+import { ensureDemoPatientDocuments, loadVerifiedDemoFixtures } from './demoPatientData.js'
 
 const scrypt = promisify(scryptCallback)
-const DEMO_PATIENT = { email: 'demo@gmail.com', password: 'demo123', name: 'Shikha Sharma', role: 'patient' }
-const DEMO_DOCTOR = { email: 'doctor.demo@gmail.com', password: 'doctor123', name: 'Dr. Anika Sharma', role: 'doctor' }
-const DEMO_EMAILS = new Set([DEMO_PATIENT.email, DEMO_DOCTOR.email])
-const LEGACY_DEMO_EMAIL = 'demo@carevault.invalid'
+export const DEMO_IDENTITIES = {
+  patient: { email: 'demo.patient@carevault.invalid', name: 'Shikha Sharma', role: 'patient' },
+  doctor: { email: 'demo.doctor@carevault.invalid', name: 'Dr. Anika Sharma', role: 'doctor' },
+}
+const DENIED_LEGACY_EMAILS = new Set(['demo@gmail.com', 'doctor.demo@gmail.com', 'demo@carevault.invalid'])
 const DEMO_GRANT_HOURS = 24 * 30
+
+export function isDemoAccountEmail(email) {
+  return DENIED_LEGACY_EMAILS.has(String(email || '').toLowerCase())
+}
+
+function randomPassword() {
+  return randomBytes(48).toString('base64url')
+}
 
 async function passwordFields(password) {
   const passwordSalt = randomBytes(16).toString('hex')
@@ -17,59 +26,47 @@ async function passwordFields(password) {
   return { passwordSalt, passwordHash }
 }
 
-async function findOrPromoteLegacyPatient() {
-  const existing = await User.findOne({ email: DEMO_PATIENT.email })
-  if (existing) return existing
-
-  // Reuse the account created by the old demo shortcut, preserving its user ID and records.
-  const legacy = await User.collection.findOne({ email: LEGACY_DEMO_EMAIL, isDemo: true })
-  if (!legacy) return null
-  await User.collection.updateOne(
-    { _id: legacy._id },
-    { $set: { email: DEMO_PATIENT.email, name: DEMO_PATIENT.name, role: 'patient' }, $unset: { isDemo: '' } },
-  )
-  return User.findById(legacy._id)
+async function createDemoAccount(account, partnerId = null) {
+  const existing = await User.findOne({ email: account.email }).select('+demoRole +demoPartnerId')
+  if (existing) {
+    if (existing.demoRole !== account.role || existing.role !== account.role) {
+      throw new Error(`Demo account identity collision at ${account.email}; no account was changed.`)
+    }
+    if (account.role === 'doctor' && existing.demoPartnerId && partnerId && String(existing.demoPartnerId) !== String(partnerId)) {
+      throw new Error(`Demo doctor pairing conflict at ${account.email}; no account was changed.`)
+    }
+    return existing
+  }
+  const credentials = await passwordFields(randomPassword())
+  try {
+    return await User.create({ ...account, ...credentials, demoRole: account.role, demoPartnerId: partnerId })
+  } catch (error) {
+    if (error.code === 11000) throw new Error(`Demo account identity collision at ${account.email}; no account was changed.`)
+    throw error
+  }
 }
 
-async function upsertDemoUser(account, { promoteLegacy = false } = {}) {
-  let user = promoteLegacy ? await findOrPromoteLegacyPatient() : null
-  user ||= await User.findOne({ email: account.email })
-  const credentials = await passwordFields(account.password)
-  if (!user) {
-    try {
-      user = await User.create({ ...account, ...credentials })
-    } catch (error) {
-      if (error.code !== 11000) throw error
-      user = await User.findOne({ email: account.email })
-    }
-  }
-  if (!user) throw new Error(`Could not initialize the CareVault account ${account.email}.`)
-  user.name = account.name
-  user.email = account.email
-  user.role = account.role
-  user.passwordSalt = credentials.passwordSalt
-  user.passwordHash = credentials.passwordHash
-  await user.save()
-  await User.collection.updateOne({ _id: user._id }, { $unset: { isDemo: '' } })
-  return user
+async function setDemoPartner(doctor, patient) {
+  const result = await User.updateOne(
+    { _id: doctor._id, role: 'doctor', demoRole: 'doctor', $or: [{ demoPartnerId: null }, { demoPartnerId: patient._id }] },
+    { $set: { demoPartnerId: patient._id } },
+  )
+  if (result.matchedCount !== 1) throw new Error('Could not safely pair the demo doctor with the demo patient.')
 }
 
 async function ensureDemoAccess(patient, doctor) {
   const now = new Date()
   const expiresAt = new Date(now.getTime() + DEMO_GRANT_HOURS * 60 * 60 * 1000)
-  let grant = await AccessGrant.findOne({ patientId: patient._id, doctorId: doctor._id }).sort({ grantedAt: -1 })
+  const grant = await AccessGrant.findOne({ patientId: patient._id, doctorId: doctor._id })
   if (!grant) {
     try {
       await AccessGrant.create({ patientId: patient._id, doctorId: doctor._id, status: 'active', grantedAt: now, expiresAt })
     } catch (error) {
       if (error.code !== 11000) throw error
-      grant = await AccessGrant.findOne({ patientId: patient._id, doctorId: doctor._id, status: 'active' })
     }
     return
   }
-
-  // This initializer runs at server startup, not on ordinary API requests. Restore the demo
-  // fixture after expiry/revocation while keeping each grant in the normal access model.
+  // Restore only the dedicated demo-to-demo grant. Never touch any other relationship.
   if (grant.status !== 'active' || grant.expiresAt <= now) {
     grant.status = 'active'
     grant.grantedAt = now
@@ -81,29 +78,22 @@ async function ensureDemoAccess(patient, doctor) {
 }
 
 export async function seedDemoAccounts() {
-  const patient = await upsertDemoUser(DEMO_PATIENT, { promoteLegacy: true })
-  const doctor = await upsertDemoUser(DEMO_DOCTOR)
+  const verifiedFixtures = await loadVerifiedDemoFixtures()
+  // Preflight both reserved identities before creating or changing either account.
+  for (const account of Object.values(DEMO_IDENTITIES)) {
+    const existing = await User.findOne({ email: account.email }).select('+demoRole +demoPartnerId')
+    if (existing && (existing.demoRole !== account.role || existing.role !== account.role)) {
+      throw new Error(`Demo account identity collision at ${account.email}; no account was changed.`)
+    }
+  }
+  const patient = await createDemoAccount(DEMO_IDENTITIES.patient)
+  const doctor = await createDemoAccount(DEMO_IDENTITIES.doctor)
+  await setDemoPartner(doctor, patient)
   await ensureDemoAccess(patient, doctor)
-  // Keep Cloudinary latency/outages from blocking the HTTP server and regular login flow.
-  void ensureDemoPatientDocuments(patient)
-    .then(() => console.log('CareVault interview records are ready.'))
-    .catch((error) => console.error('CareVault demo accounts are ready, but demo documents could not be seeded:', error.message))
-  console.log('CareVault interview accounts and access are ready.')
+  await ensureDemoPatientDocuments(patient, verifiedFixtures)
+  console.log('CareVault synthetic demo accounts and records are ready.')
 }
 
-export async function refreshExpiredDemoAccessForLogin(user) {
-  if (!user || !DEMO_EMAILS.has(user.email)) return
-  const patient = await User.findOne({ email: DEMO_PATIENT.email, role: 'patient' }).select('_id')
-  const doctor = await User.findOne({ email: DEMO_DOCTOR.email, role: 'doctor' }).select('_id')
-  if (!patient || !doctor) return
-  const grant = await AccessGrant.findOne({ patientId: patient._id, doctorId: doctor._id }).sort({ grantedAt: -1 })
-  if (!grant || grant.status === 'revoked' || grant.expiresAt > new Date()) return
-  grant.status = 'active'
-  grant.grantedAt = new Date()
-  grant.expiresAt = new Date(Date.now() + DEMO_GRANT_HOURS * 60 * 60 * 1000)
-  await grant.save()
-}
-
-export function isDemoAccountEmail(email) {
-  return DEMO_EMAILS.has(email)
+export function demoAccessEnabled() {
+  return process.env.NODE_ENV !== 'production' || process.env.ENABLE_DEMO_ACCOUNTS === 'true'
 }

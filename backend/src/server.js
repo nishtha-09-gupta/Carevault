@@ -4,7 +4,7 @@ import { configureCloudinary } from './config/cloudinary.js'
 import { connectDatabase } from './config/database.js'
 import AccessGrant from './models/AccessGrant.js'
 import { assertSessionSecret } from './services/session.js'
-import { seedDemoAccounts } from './services/demoSeed.js'
+import { demoAccessEnabled, seedDemoAccounts } from './services/demoSeed.js'
 
 const port = Number(process.env.PORT) || 4000
 
@@ -28,7 +28,7 @@ try {
   assertProductionServices()
   configureCloudinary()
   await connectDatabase()
-  if (process.env.NODE_ENV !== 'production') await seedDemoAccounts()
+  if (demoAccessEnabled()) await seedDemoAccounts()
   await AccessGrant.updateMany({ status: 'active', expiresAt: { $lte: new Date() } }, { $set: { status: 'expired' } })
   const expiryTimer = setInterval(() => {
     AccessGrant.updateMany({ status: 'active', expiresAt: { $lte: new Date() } }, { $set: { status: 'expired' } })

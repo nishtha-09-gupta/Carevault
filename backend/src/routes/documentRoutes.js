@@ -3,6 +3,7 @@ import multer from 'multer'
 import { deleteDocument, getDocument, getOwnedDocumentFile, listDocuments, uploadNewDocument } from '../controllers/documentController.js'
 import { authenticate } from '../middleware/authenticate.js'
 import { MAX_FILE_SIZE, isAllowedFile } from '../utils/documentValidation.js'
+import { requireWritableAccount } from '../middleware/demoAccess.js'
 
 const router = Router()
 const upload = multer({
@@ -19,10 +20,10 @@ const upload = multer({
 })
 
 router.use(authenticate)
-router.post('/', upload.single('document'), uploadNewDocument)
+router.post('/', requireWritableAccount, upload.single('document'), uploadNewDocument)
 router.get('/', listDocuments)
 router.get('/:id/file', getOwnedDocumentFile)
 router.get('/:id', getDocument)
-router.delete('/:id', deleteDocument)
+router.delete('/:id', requireWritableAccount, deleteDocument)
 
 export default router

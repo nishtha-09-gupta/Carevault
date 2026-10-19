@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { randomBytes } from 'node:crypto'
 import { test } from 'node:test'
 import {
   generateOtp,
@@ -16,7 +17,7 @@ test('password reset OTPs are cryptographically generated six-digit strings', ()
 
 test('reset grants are unguessable and reset secrets are stored as keyed hashes', () => {
   const previous = process.env.SESSION_SECRET
-  process.env.SESSION_SECRET = 'test-only-session-secret-with-more-than-32-characters'
+  process.env.SESSION_SECRET = randomBytes(48).toString('base64url')
   try {
     const otp = generateOtp()
     const hash = hashResetSecret(otp)

@@ -26,7 +26,7 @@ export async function listMedicalRecords(req, res) {
     Document.find({ ownerId: req.user.id }).select('+demoSeedKey').sort({ uploadedAt: -1 }),
   ])
   res.setHeader('Cache-Control', 'private, no-store')
-  return res.json({ records: records.map(apiRecord), documents: docs.map((d) => ({ id: String(d._id), title: d.title, uploadedAt: d.uploadedAt, fileType: d.fileType, category: d.category, eventDate: d.eventDate, isDemoSample: Boolean(d.demoSeedKey) })), isDemoAccount: req.user.email === 'demo@gmail.com' })
+  return res.json({ records: records.map(apiRecord), documents: docs.map((d) => ({ id: String(d._id), title: d.title, uploadedAt: d.uploadedAt, fileType: d.fileType, category: d.category, eventDate: d.eventDate, isDemoSample: Boolean(d.demoSeedKey) })), isDemoAccount: Boolean(req.user.isDemo) })
 }
 
 export async function createMedicalRecord(req, res) {
@@ -81,7 +81,7 @@ export async function getMyTimeline(req, res) {
   const apiRecords = records.map(apiRecord)
   const events = createTimelineEvents(apiRecords, documents.map((d) => ({ id: String(d._id), title: d.title, category: d.category, eventDate: d.eventDate, uploadedAt: d.uploadedAt })))
   res.setHeader('Cache-Control', 'private, no-store')
-  return res.json({ events, isDemoAccount: req.user.email === 'demo@gmail.com' })
+  return res.json({ events, isDemoAccount: Boolean(req.user.isDemo) })
 }
 
 export { parseMedicalDate }

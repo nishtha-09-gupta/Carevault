@@ -16,13 +16,15 @@ export async function authenticate(req, res, next) {
     return res.status(401).json({ error: 'Your session is invalid. Please log in again.' })
   }
   try {
-    const user = await User.findById(payload.sub).select('_id name email role +sessionVersion')
+    const user = await User.findById(payload.sub).select('_id name email role demoRole demoPartnerId +sessionVersion')
     if (!user) return res.status(401).json({ error: 'Your session is no longer valid. Please log in again.' })
-    if (process.env.NODE_ENV === 'production' && isDemoAccountEmail(user.email)) {
+    if (isDemoAccountEmail(user.email)) {
       return res.status(401).json({ error: 'This demo account is not available in production.' })
     }
+    if (user.demoRole && !['patient', 'doctor'].includes(user.demoRole)) return res.status(401).json({ error: 'Your session is no longer valid.' })
+    if (user.demoRole === 'doctor' && !user.demoPartnerId) return res.status(401).json({ error: 'Your session is no longer valid.' })
     if ((payload.ver || 0) !== user.sessionVersion) return res.status(401).json({ error: 'Your session has ended. Please log in again.' })
-    req.user = { id: user.id, name: user.name, email: user.email, role: user.role, sessionVersion: user.sessionVersion }
+    req.user = { id: user.id, name: user.name, email: user.email, role: user.role, isDemo: Boolean(user.demoRole), demoRole: user.demoRole || null, demoPartnerId: user.demoPartnerId ? String(user.demoPartnerId) : null, sessionVersion: user.sessionVersion }
     return next()
   } catch (error) {
     return next(error)

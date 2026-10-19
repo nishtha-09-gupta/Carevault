@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react'
-import { getCurrentUser, signIn, signOut as signOutRequest, signUp } from '../services/authApi'
+import { demoSignIn, getCurrentUser, signIn, signOut as signOutRequest, signUp } from '../services/authApi'
 
 const AuthContext = createContext(null)
 
@@ -47,6 +47,7 @@ export function AuthProvider({ children }) {
     user,
     loading,
     signIn(details) { return establishSession(() => signIn(details)) },
+    demoSignIn(role) { return establishSession(() => demoSignIn(role)) },
     signUp(details) { return establishSession(() => signUp(details)) },
     async signOut() {
       const revision = ++authRevision.current
