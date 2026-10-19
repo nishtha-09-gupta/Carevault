@@ -32,7 +32,6 @@ export async function demoLogin(req, res) {
   const identity = DEMO_IDENTITIES[role]
   const user = await User.findOne({ email: identity.email, role, demoRole: role }).select('+sessionVersion +demoRole +demoPartnerId')
   if (!user) return res.status(503).json({ error: 'Demo access is not configured.' })
-  if (role === 'doctor' && !user.demoPartnerId) return res.status(503).json({ error: 'Demo access is not configured.' })
   setSessionCookie(res, createSession(user.id, user.sessionVersion))
   return res.json({ user: publicUser(user) })
 }

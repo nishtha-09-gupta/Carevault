@@ -678,7 +678,7 @@ export function AuthPage({ mode = 'login' }) {
               <button type="button" disabled={submitting} onClick={() => openDemo('patient')} className="btn-secondary justify-center !px-2 text-xs disabled:opacity-50">Demo Patient</button>
               <button type="button" disabled={submitting} onClick={() => openDemo('doctor')} className="btn-secondary justify-center !px-2 text-xs disabled:opacity-50">Demo Doctor</button>
             </div>
-            <p className="mt-2 text-center text-xs text-slate-400">Explore fictional sample records in read-only demo accounts.</p>
+            <p className="mt-2 text-center text-xs text-slate-400">Explore fictional sample records in demo accounts.</p>
           </div>}
 
           <p className="mt-5 text-center text-sm text-slate-500">

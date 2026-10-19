@@ -27,14 +27,12 @@ async function markExpired(filter, now) {
 export async function searchDoctors(req, res) {
   const error = roleError(req, 'patient')
   if (error) return res.status(403).json({ error })
-  if (req.user.isDemo) return res.status(403).json({ error: 'Demo accounts cannot search for real doctors.' })
   const query = typeof req.query.q === 'string' ? req.query.q.trim() : ''
   if (query.length < 2 || query.length > 100) return res.status(400).json({ error: 'Enter at least two characters to search for a doctor.' })
 
   const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
   const doctors = await User.find({
     role: 'doctor',
-    demoRole: null,
     $or: [
       { name: { $regex: escaped, $options: 'i' } },
       { email: { $regex: escaped, $options: 'i' } },
@@ -54,8 +52,7 @@ export async function listAccess(req, res) {
 
   if (req.user.role === 'doctor') {
     const grantFilter = { doctorId: req.user.id, status: 'active', expiresAt: { $gt: now } }
-    if (req.user.demoRole === 'doctor') grantFilter.patientId = req.user.demoPartnerId
-    await markExpired({ doctorId: req.user.id, ...(req.user.demoRole === 'doctor' ? { patientId: req.user.demoPartnerId } : {}) }, now)
+    await markExpired({ doctorId: req.user.id }, now)
     const grants = await AccessGrant.find(grantFilter)
       .populate('patientId', 'name email role').sort({ expiresAt: 1 }).lean()
     return res.json({ grants: grants.map((grant) => apiGrant(grant, 'patient', grant.patientId?.role === 'patient' ? grant.patientId : null)) })
@@ -70,9 +67,8 @@ export async function listDoctorPatients(req, res) {
   const error = roleError(req, 'doctor')
   if (error) return res.status(403).json({ error })
   const now = new Date()
-  await markExpired({ doctorId: req.user.id, ...(req.user.demoRole === 'doctor' ? { patientId: req.user.demoPartnerId } : {}) }, now)
+  await markExpired({ doctorId: req.user.id }, now)
   const grantFilter = { doctorId: req.user.id, status: 'active', expiresAt: { $gt: now } }
-  if (req.user.demoRole === 'doctor') grantFilter.patientId = req.user.demoPartnerId
   const grants = await AccessGrant.find(grantFilter)
     .populate('patientId', 'name email role').sort({ expiresAt: 1 }).lean()
   const patients = await Promise.all(grants.filter((grant) => grant.patientId?.role === 'patient').map(async (grant) => ({
@@ -93,7 +89,7 @@ export async function getDoctorPatientAccess(req, res) {
   const error = roleError(req, 'doctor')
   if (error) return res.status(403).json({ error })
   if (!mongoose.isValidObjectId(req.params.patientId)) return res.status(404).json({ error: 'Patient not found.' })
-  const patient = await User.findOne({ _id: req.params.patientId, role: 'patient', ...(req.user.demoRole === 'doctor' ? { demoRole: 'patient', _id: req.user.demoPartnerId } : {}) }).select('_id name email').lean()
+  const patient = await User.findOne({ _id: req.params.patientId, role: 'patient' }).select('_id name email').lean()
   if (!patient) return res.status(404).json({ error: 'Patient not found.' })
   const grant = await AccessGrant.findOne({ patientId: patient._id, doctorId: req.user.id }).sort({ grantedAt: -1 })
   if (!grant || grant.status === 'revoked') return res.status(403).json({ error: 'You do not have access to this patient.' })
@@ -125,7 +121,7 @@ export async function grantAccess(req, res) {
     return res.status(400).json({ error: `Choose an access duration from 1 to ${MAX_ACCESS_DURATION_HOURS} hours.` })
   }
 
-  const doctor = await User.findOne({ _id: doctorId, role: 'doctor', demoRole: null }).select('_id name email')
+  const doctor = await User.findOne({ _id: doctorId, role: 'doctor' }).select('_id name email')
   if (!doctor) return res.status(404).json({ error: 'Doctor account not found.' })
 
   const now = new Date()

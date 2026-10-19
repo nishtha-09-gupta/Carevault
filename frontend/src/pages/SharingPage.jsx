@@ -4,15 +4,12 @@ import { Link } from 'react-router-dom'
 import AppShell from '../components/AppShell'
 import { EmptyState, PageHeading, StatusBadge } from '../components/UI'
 import { fetchAccessGrants, findDoctors, grantDoctorAccess, revokeDoctorAccess } from '../services/accessApi'
-import { useAuth } from '../components/AuthContext'
 
 function dateTime(value) {
   return new Date(value).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 
 export default function SharingPage({ role = 'patient' }) {
-  const { user } = useAuth()
-  const isDemo = Boolean(user?.isDemo)
   const isDoctor = role === 'doctor'
   const [grants, setGrants] = useState([])
   const [loading, setLoading] = useState(true)
@@ -107,9 +104,8 @@ export default function SharingPage({ role = 'patient' }) {
 
       {error && <p role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
       {notice && <p role="status" className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
-      {isDemo && <p className="mb-5 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Demo account access and records are read-only.</p>}
 
-      {!isDoctor && !isDemo && <section className="card mb-7 p-5 sm:p-6">
+      {!isDoctor && <section className="card mb-7 p-5 sm:p-6">
         <div className="flex items-start gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-xl bg-mint text-teal"><UserRoundPlus size={18}/></span>
           <div><h2 className="font-semibold">Grant a doctor temporary access</h2><p className="mt-1 text-sm text-slate-500">Doctors can view your uploaded documents until the access period ends or you revoke it.</p></div>
@@ -150,7 +146,7 @@ export default function SharingPage({ role = 'patient' }) {
               <span className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-lilac text-sm font-bold text-indigo-700">{other?.name?.split(' ').map((part) => part[0]).slice(0, 2).join('') || '?'}</span>
               <div className="min-w-0 flex-1"><h3 className="truncate text-sm font-semibold">{other?.name || 'Account unavailable'}</h3><p className="truncate text-xs text-slate-500">{other?.email || 'User account'}</p><p className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><Clock3 size={13}/> {active ? 'Expires ' + dateTime(grantItem.expiresAt) : grantItem.status === 'revoked' ? 'Revoked ' + (grantItem.revokedAt ? dateTime(grantItem.revokedAt) : '') : 'Expired ' + dateTime(grantItem.expiresAt)}</p></div>
               <StatusBadge tone={active ? 'green' : grantItem.status === 'revoked' ? 'gray' : 'amber'}>{active ? 'Active' : grantItem.status === 'revoked' ? 'Revoked' : 'Expired'}</StatusBadge>
-              {!isDoctor && !isDemo && active && <button type="button" disabled={revokingId === grantItem.id} onClick={() => revoke(grantItem.id)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{revokingId === grantItem.id ? 'Revoking…' : 'Revoke access'}</button>}
+              {!isDoctor && active && <button type="button" disabled={revokingId === grantItem.id} onClick={() => revoke(grantItem.id)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50">{revokingId === grantItem.id ? 'Revoking…' : 'Revoke access'}</button>}
             </article>
           })}</div>}
       </section>

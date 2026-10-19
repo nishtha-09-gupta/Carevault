@@ -66,15 +66,7 @@ async function ensureDemoAccess(patient, doctor) {
     }
     return
   }
-  // Restore only the dedicated demo-to-demo grant. Never touch any other relationship.
-  if (grant.status !== 'active' || grant.expiresAt <= now) {
-    grant.status = 'active'
-    grant.grantedAt = now
-    grant.expiresAt = expiresAt
-    grant.revokedAt = null
-    grant.revokedBy = null
-    await grant.save()
-  }
+  // Respect patient revocation and expiry; normal patient actions can grant access again.
 }
 
 export async function seedDemoAccounts() {
