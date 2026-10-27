@@ -1,4 +1,4 @@
-import { apiUrl } from './apiUrl'
+import { apiUrl } from './apiUrl.js'
 
 const DOCUMENTS_URL = apiUrl('/api/documents')
 
@@ -10,7 +10,7 @@ async function readJson(response) {
   return payload
 }
 
-async function apiRequest(url, options) {
+async function apiRequest(url, options = {}) {
   const timeoutSignal = AbortSignal.timeout(30000)
   const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
   try {
