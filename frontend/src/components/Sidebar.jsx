@@ -11,6 +11,7 @@ import {
   X,
   ClipboardList,
   LockKeyhole,
+  Sparkles,
 } from 'lucide-react'
 import Brand from './Brand'
 import { useAuth } from './AuthContext'
@@ -21,6 +22,7 @@ const patientItems = [
   { to: '/records', label: 'Medical records', icon: FileText },
   { to: '/timeline', label: 'Health timeline', icon: Clock3 },
   { to: '/documents', label: 'Documents', icon: FolderOpen },
+  { to: '/ai-analysis', label: 'AI Analysis', icon: Sparkles },
   { to: '/intake', label: 'Health intake', icon: ClipboardList },
   { to: '/connections', label: 'Connections', icon: UsersRound },
   { to: '/sharing', label: 'Sharing & access', icon: LockKeyhole },

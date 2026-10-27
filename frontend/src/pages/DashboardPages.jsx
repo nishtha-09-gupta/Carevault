@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { ArrowRight, LoaderCircle, Plus } from 'lucide-react'
+import { ArrowRight, LoaderCircle, Plus, Sparkles } from 'lucide-react'
 import AppShell from '../components/AppShell'
 import { PageHeading, RecordIcon, SectionTitle, StatCard, StatusBadge } from '../components/UI'
 import { useAuth } from '../components/AuthContext'
@@ -43,6 +43,11 @@ export function PatientDashboard() {
         <section className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">MEDICAL RECORDS</p><p className="mt-3 text-3xl font-bold">{error ? '—' : documents.length}</p><p className="mt-1 text-sm text-slate-500">{error || 'Documents stored in your private library'}</p><Link to="/documents" className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-teal">Open document library <ArrowRight size={15}/></Link></section>
         <section className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">ACTIVE DOCTOR ACCESS</p><p className="mt-3 text-3xl font-bold">{accessError ? '—' : activeGrants.length}</p><p className="mt-1 text-sm text-slate-500">{accessError || 'You control who can view your records'}</p><Link to="/sharing" className="mt-5 inline-flex items-center gap-1 text-sm font-semibold text-teal">Review sharing & access <ArrowRight size={15}/></Link></section>
       </div>
+      <Link to="/ai-analysis" className="card mt-5 flex flex-wrap items-center gap-4 p-5 transition hover:border-teal/40 hover:shadow-sm">
+        <span className="grid h-11 w-11 place-items-center rounded-xl bg-mint text-teal"><Sparkles size={20}/></span>
+        <span className="min-w-0 flex-1"><span className="block font-semibold">AI Analysis</span><span className="mt-1 block text-sm text-slate-500">Choose an uploaded report, analyze it, and review extracted details.</span></span>
+        <span className="inline-flex items-center gap-1 text-sm font-semibold text-teal">Open analysis <ArrowRight size={15}/></span>
+      </Link>
       <section className="mt-8"><div className="mb-4 flex items-center justify-between"><h2 className="font-semibold">Recent records</h2><Link to="/documents" className="text-xs font-semibold text-teal hover:underline">All documents →</Link></div>
         {error ? <p role="alert" className="card p-5 text-sm text-rose-700">{error}</p>
           : documents.length === 0 ? <div className="card p-8 text-center text-sm text-slate-500">Your CareVault document library is empty.</div>

@@ -11,15 +11,30 @@ async function readJson(response) {
 }
 
 async function apiRequest(url, options) {
+  const timeoutSignal = AbortSignal.timeout(30000)
+  const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
   try {
-    return await readJson(await fetch(url, { credentials: 'include', ...options }))
+    return await readJson(await fetch(url, { credentials: 'include', ...options, signal }))
   } catch (error) {
-    if (error.name === 'AbortError') throw error
+    // Caller aborts (for example React StrictMode effect cleanup or navigation)
+    // must stay identifiable so page handlers can ignore them. Only the timeout
+    // signal should become the user-facing timeout error.
+    if (error.name === 'TimeoutError') {
+      throw new Error('The CareVault API request timed out. Check the server connection and retry.')
+    }
     if (error instanceof TypeError) {
       throw new Error('Could not reach the CareVault API. Start the backend and check its MongoDB connection.')
     }
     throw error
   }
+}
+
+function analysisFrom(payload, { requireId = false } = {}) {
+  const analysis = payload?.analysis
+  if (!analysis || !['pending', 'processing', 'completed', 'failed', 'not_requested'].includes(analysis.status) || (requireId && !analysis.id)) {
+    throw new Error('The CareVault API returned an invalid analysis status. Refresh the page and retry.')
+  }
+  return analysis
 }
 
 export async function fetchDocuments(signal) {
@@ -79,4 +94,28 @@ export async function fetchDocumentFile(id) {
 
 export async function removeDocument(id) {
   return apiRequest(DOCUMENTS_URL + '/' + encodeURIComponent(id), { method: 'DELETE' })
+}
+
+export async function fetchDocumentAnalysis(id) {
+  const payload = await apiRequest(`${DOCUMENTS_URL}/${encodeURIComponent(id)}/analysis`)
+  return analysisFrom(payload)
+}
+
+export async function startDocumentAnalysis(id, { reanalyze = false } = {}) {
+  const payload = await apiRequest(`${DOCUMENTS_URL}/${encodeURIComponent(id)}/analysis`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reanalyze }) })
+  return analysisFrom(payload, { requireId: true })
+}
+
+export async function saveDocumentAnalysisReview(id, analysisId, result) {
+  const payload = await apiRequest(`${DOCUMENTS_URL}/${encodeURIComponent(id)}/analysis/${encodeURIComponent(analysisId)}/review`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ result }) })
+  return payload.analysis
+}
+
+export async function confirmDocumentAnalysis(id, analysisId, result) {
+  return apiRequest(`${DOCUMENTS_URL}/${encodeURIComponent(id)}/analysis/${encodeURIComponent(analysisId)}/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ result }) })
+}
+
+export async function retryDocumentAnalysis(id) {
+  const payload = await apiRequest(`${DOCUMENTS_URL}/${encodeURIComponent(id)}/analysis/retry`, { method: 'POST' })
+  return payload.analysis
 }

@@ -16,7 +16,7 @@ npm --prefix frontend install
 npm --prefix backend install
 ```
 
-Create `backend/.env` from `backend/.env.example`, then set `MONGODB_URI`, `MONGODB_DATABASE`, `SESSION_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. To deliver password-reset emails, configure `EMAIL_USER`, `EMAIL_PASS`, and `EMAIL_FROM` for a Gmail account with a Google App Password. These values are backend-only; keep `backend/.env` private. Use a cryptographically random `SESSION_SECRET` with at least 32 characters. `MONGODB_DATABASE` defaults to `carevault` if omitted.
+Create `backend/.env` from `backend/.env.example`, then set `MONGODB_URI`, `MONGODB_DATABASE`, `SESSION_SECRET`, `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, and `CLOUDINARY_API_SECRET`. To enable document analysis, set the backend-only `GROQ_API_KEY` and `GROQ_MODEL`. The key is never sent to the frontend. To deliver password-reset emails, configure `EMAIL_USER`, `EMAIL_PASS`, and `EMAIL_FROM` for a Gmail account with a Google App Password. Keep all backend values private. Use a cryptographically random `SESSION_SECRET` with at least 32 characters. `MONGODB_DATABASE` defaults to `carevault` if omitted.
 
 ## Run locally
 
@@ -49,6 +49,10 @@ Build the frontend with `npm --prefix frontend run build`. Run backend validatio
 - `GET /api/documents/:id` — fetch metadata for one owned document.
 - `GET /api/documents/:id/file` — stream an owned document through the authenticated API without exposing its Cloudinary URL.
 - `DELETE /api/documents/:id` — remove an owned file from Cloudinary and its metadata from MongoDB.
+- `GET /api/documents/:id/analysis` — get the status/results for an owned document.
+- `PUT /api/documents/:id/analysis/:analysisId/review` — save patient edits to extracted information.
+- `POST /api/documents/:id/analysis/:analysisId/confirm` — explicitly add reviewed information as a medical record linked to the original document.
+- `POST /api/documents/:id/analysis/retry` — retry failed analysis.
 - `GET /api/medical-records` — patient-only saved entries plus owned document metadata.
 - `POST /api/medical-records` and `PUT /api/medical-records/:id` — create or update a patient-owned medical record, optionally linked to an owned document ID.
 - `DELETE /api/medical-records/:id` — delete an owned medical record.
@@ -61,7 +65,23 @@ Build the frontend with `npm --prefix frontend run build`. Run backend validatio
 - `GET /api/doctor/patients/:patientId/documents` and `/api/doctor/patients/:patientId/documents/:documentId/file` — patient-scoped records and file streaming, checked against the active grant on every request.
 - `GET /api/health` — basic API process check.
 
+## Sharing & access history
+
+The **Sharing & access** page uses the existing access-grants API. Its history can be filtered by All, Active, Expired, or Revoked, with counts derived from the returned grants and their expiry times. Search matches the other person's name or email and works together with the status filter. Results show six grants per page with a summary and page controls; changing the search or filter returns to page one. Patients can revoke only active, unexpired grants, after confirming the action. Filtering and pagination do not change grant records or backend authorization behavior.
+
 Uploads accept PDF, JPG, JPEG, and PNG files up to 10 MB. The backend checks the extension, browser-provided MIME type, and file signature. Cloudinary stores the bytes as authenticated assets; MongoDB stores the metadata and Cloudinary identifiers, not the file bytes. The API streams files only after checking the owner or active patient-doctor grant. Passwords are salted and derived with Node's scrypt. Sessions use signed, HTTP-only, same-site cookies and expire after seven days. Login and registration attempts are rate limited. Deploy the frontend and API behind the same site so the cookie remains same-site. Document routes require a valid account session, and every document query is scoped to its owner.
+
+## Asynchronous document analysis
+
+After a successful upload, the API persists the document first and then writes an idempotent analysis job to MongoDB. The API-host process runs a worker that claims jobs using atomic MongoDB updates and expiring leases, so pending and interrupted jobs survive refreshes, logout, and backend restarts. Multiple API instances may run the worker safely. MongoDB is the persistent queue; no Redis service is required. If job creation is interrupted, a recovery scan finds pending document rows. Transient Groq/storage failures retry with bounded backoff; exhausted jobs remain `Failed` and can be retried by the patient. Missing Groq configuration does not block upload.
+
+Digital PDF text is read with PDF.js and skips OCR when sufficient embedded text is available. Image uploads and scanned PDF pages use Tesseract.js English OCR; scanned PDFs default to a limit of 8 pages (`DOCUMENT_OCR_MAX_PAGES`). Embedded page images are extracted and downscaled only when they exceed 2200 pixels on an edge. Digital PDFs default to a 20-page limit (`DOCUMENT_MAX_PDF_PAGES`). OCR may need to download English language data from the Tesseract.js CDN on first use after a fresh host start; allow outbound HTTPS from the backend. Extracted text is held in worker memory and sent to Groq. A bounded, short-lived in-memory cache reuses extracted text for transient retries, clears it after success, and never writes it to MongoDB or logs. Raw report text and private Cloudinary URLs are not logged. MongoDB stores validated extracted fields and evidence snippets. Patients can edit results and must explicitly confirm them before the app creates a record/timeline event. The source document ID is retained on the record. Doctors can read analysis only through the same active patient grant that controls document access; the grant is rechecked for each request. Worker logs include stage durations, OCR mode/page counts, and Groq token counts only.
+
+Set `GROQ_MODEL` to a model currently enabled for your Groq account and strict JSON Schema output. The current implementation locally allowlists `openai/gpt-oss-20b`, `openai/gpt-oss-120b`, and `qwen/qwen3.8-27b`, based on Groq's published [Structured Outputs model list](https://console.groq.com/docs/structured-outputs). It sends one strict-schema completion request per attempt instead of making a separate models-list request first; model/account availability failures are handled as retryable or actionable job failures. For local setup, add both `GROQ_API_KEY` and `GROQ_MODEL` to `backend/.env`, restart the API, then upload a synthetic test document. If the key is omitted, uploads still work but jobs eventually show `Failed` until the environment is configured and the patient retries.
+
+Local steps: run `npm --prefix backend install` and `npm --prefix frontend install`; copy `backend/.env.example` to `backend/.env`; fill in MongoDB, Cloudinary, session, and CORS settings; set `GROQ_API_KEY` and `GROQ_MODEL` to enable analysis; start MongoDB, then run `npm --prefix backend run dev` and `npm --prefix frontend run dev` in separate terminals. `GROQ_API_KEY` is optional for upload testing; queued jobs will retry and eventually show Failed until Groq is configured.
+
+Render deployment steps: use the existing API service with backend root directory `backend`, build command `npm install`, and start command `npm start`. Add `GROQ_API_KEY`, `GROQ_MODEL`, and optionally `DOCUMENT_OCR_MAX_PAGES`/`DOCUMENT_MAX_PDF_PAGES` in that Render service's Environment settings, alongside its existing MongoDB, Cloudinary, session, CORS, and email values; keep the key out of Vercel variables and Git. The first API start creates the analysis collection and required unique indexes. No separate worker service, Redis, or Render disk is needed because job state is in MongoDB. Ensure the service can make outbound HTTPS requests to `api.groq.com` and the Tesseract.js language-data CDN. Deploy the frontend changes to Vercel as part of the same release. After deployment, verify `/api/health`, sign in with a patient account, open **AI Analysis**, select a synthetic PDF/image, start analysis, and review/confirm before checking the medical timeline.
 
 ## Project layout
 

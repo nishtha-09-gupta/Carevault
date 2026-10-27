@@ -5,6 +5,9 @@ import { connectDatabase } from './config/database.js'
 import AccessGrant from './models/AccessGrant.js'
 import { assertSessionSecret } from './services/session.js'
 import { demoAccessEnabled, seedDemoAccounts } from './services/demoSeed.js'
+import { startDocumentAnalysisWorker } from './services/documentAnalysisQueue.js'
+import DocumentAnalysis from './models/DocumentAnalysis.js'
+import MedicalRecord from './models/MedicalRecord.js'
 
 const port = Number(process.env.PORT) || 4000
 
@@ -28,6 +31,9 @@ try {
   assertProductionServices()
   configureCloudinary()
   await connectDatabase()
+  await DocumentAnalysis.init()
+  await MedicalRecord.collection.createIndex({ analysisId: 1 }, { unique: true, partialFilterExpression: { analysisId: { $type: 'objectId' } } })
+  startDocumentAnalysisWorker()
   if (demoAccessEnabled()) await seedDemoAccounts()
   await AccessGrant.updateMany({ status: 'active', expiresAt: { $lte: new Date() } }, { $set: { status: 'expired' } })
   const expiryTimer = setInterval(() => {

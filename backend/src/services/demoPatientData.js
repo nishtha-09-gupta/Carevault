@@ -79,6 +79,7 @@ export async function ensureDemoPatientDocuments(user, verifiedFixtures = null) 
         fileType: 'application/pdf',
         fileSize: buffer.length,
         uploadedAt: new Date(record.uploadedAt),
+        analysisStatus: 'not_requested',
         category: record.category || null,
         eventDate: record.eventDate ? new Date(`${record.eventDate}T00:00:00.000Z`) : null,
       })

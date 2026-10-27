@@ -3,7 +3,7 @@ import { Route, Routes, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './components/AuthContext'
 import { LandingPage, AuthPage, ForgotPasswordPage, HowItWorksPage, ForYouPage, PrivacyPage } from './pages/PublicPages'
 import { DoctorDashboard, PatientDashboard } from './pages/DashboardPages'
-import { ConnectionsPage, DocumentsPage, RecordsPage, TimelinePage } from './pages/HealthPages'
+import { AIAnalysisPage, ConnectionsPage, DocumentsPage, RecordsPage, TimelinePage } from './pages/HealthPages'
 import IntakePage from './pages/IntakePage'
 import SharingPage from './pages/SharingPage'
 import SettingsPage from './pages/SettingsPage'
@@ -58,6 +58,7 @@ function AppRoutes() {
       <Route path="/timeline" element={<Workspace role="patient"><TimelinePage /></Workspace>} />
       <Route path="/doctor/timeline" element={<Navigate to="/doctor/patients" replace />} />
       <Route path="/documents" element={<Workspace role="patient"><DocumentsPage /></Workspace>} />
+      <Route path="/ai-analysis" element={<Workspace role="patient"><AIAnalysisPage /></Workspace>} />
       <Route path="/doctor/documents" element={<Workspace role="doctor"><DocumentsPage role="doctor" /></Workspace>} />
       <Route path="/connections" element={<Workspace role="patient"><ConnectionsPage /></Workspace>} />
       <Route path="/doctor/connections" element={<Navigate to="/doctor/patients" replace />} />

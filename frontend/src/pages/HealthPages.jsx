@@ -15,7 +15,7 @@ import {
 import AppShell from '../components/AppShell'
 import DocumentPreview from '../components/DocumentPreview'
 import { EmptyState, PageHeading, RecordIcon, StatusBadge } from '../components/UI'
-import { fetchDocumentFile, fetchDocuments, removeDocument, uploadDocument } from '../services/documentApi'
+import { confirmDocumentAnalysis, fetchDocumentAnalysis, fetchDocumentFile, fetchDocuments, removeDocument, retryDocumentAnalysis, saveDocumentAnalysisReview, startDocumentAnalysis, uploadDocument } from '../services/documentApi'
 import { fetchAccessGrants, fetchDoctorPatients, fetchPatientDocumentFile, fetchPatientDocuments } from '../services/accessApi'
 import { deleteMedicalRecord, fetchMedicalRecords, fetchTimeline, saveMedicalRecord } from '../services/medicalRecordApi'
 
@@ -435,6 +435,106 @@ export function DocumentsPage({ role = 'patient' }) {
   )
 }
 
+export function AIAnalysisPage() {
+  const [documents, setDocuments] = useState([])
+  const [selectedId, setSelectedId] = useState('')
+  const [analysis, setAnalysis] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+
+  useEffect(() => {
+    let active = true
+    fetchDocuments().then((items) => {
+      if (!active) return
+      const supported = items.filter((item) => ['application/pdf', 'image/jpeg', 'image/png'].includes(item.fileType))
+      setDocuments(supported)
+      setSelectedId((current) => current && supported.some((item) => item.id === current) ? current : supported[0]?.id || '')
+    }).catch((e) => { if (active) setError(e.message) }).finally(() => { if (active) setLoading(false) })
+    return () => { active = false }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    setAnalysis(null)
+    if (!selectedId) return () => { active = false }
+    fetchDocumentAnalysis(selectedId).then((value) => { if (active) setAnalysis(value) }).catch((e) => { if (active) setError(e.message) })
+    return () => { active = false }
+  }, [selectedId])
+
+  useEffect(() => {
+    if (!selectedId || !['pending', 'processing'].includes(analysis?.status)) return
+    const timer = window.setInterval(() => {
+      fetchDocumentAnalysis(selectedId).then((value) => { setAnalysis(value); setError('') }).catch((e) => setError(e.message))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [selectedId, analysis?.status])
+
+  const selected = documents.find((item) => item.id === selectedId)
+  const failureMessage = {
+    GROQ_NOT_CONFIGURED: 'AI analysis is not configured on the server. Ask the CareVault administrator to set GROQ_API_KEY and GROQ_MODEL.',
+    GROQ_MODEL_UNSUPPORTED: 'The configured AI model does not support the required safe structured output. Ask the administrator to check GROQ_MODEL.',
+    GROQ_MODEL_UNAVAILABLE: 'The configured AI model is not enabled for this Groq account. Ask the administrator to check model access.',
+    GROQ_RATE_LIMITED: 'Groq is busy or rate limited. Wait a moment, then retry.',
+    GROQ_TIMEOUT: 'The analysis request timed out. Retry in a moment.',
+    GROQ_TEMPORARY_FAILURE: 'The AI service is temporarily unavailable. Retry in a moment.',
+    GROQ_MALFORMED_RESPONSE: 'The AI service returned an unreadable result. Retry the analysis.',
+    GROQ_RESPONSE_TRUNCATED: 'The report produced too much output for one analysis. Split it into smaller reports and retry.',
+    NO_READABLE_TEXT: 'No readable report text was found. Choose a clearer scan or a text-based PDF.',
+    DOCUMENT_TOO_MANY_PAGES: 'This report has too many pages to analyze at once.',
+    SCANNED_PDF_TOO_MANY_PAGES: 'This scanned PDF exceeds the OCR page limit. Split it into smaller files and retry.',
+    SCANNED_PDF_IMAGE_TOO_LARGE: 'This scanned PDF contains an image that is too large to process safely. Reduce its resolution and retry.',
+    SCANNED_PDF_IMAGE_UNSUPPORTED: 'This scanned PDF uses an unsupported image format. Save it as a standard PDF or image and retry.',
+    SCANNED_PDF_IMAGE_NOT_FOUND: 'No OCR-readable page image was found. Save the report as a flattened PDF or image and retry.',
+    DOCUMENT_TEXT_TOO_LONG: 'This report is too long to analyze. Choose a shorter report.',
+  }
+
+  async function begin(reanalyze = false) {
+    if (!selectedId || busy) return
+    setBusy(true); setError(''); setNotice('')
+    try {
+      setAnalysis(await startDocumentAnalysis(selectedId, { reanalyze }))
+      setNotice('Analysis started. This page will update as results are ready.')
+    } catch (e) { setError(e.message) } finally { setBusy(false) }
+  }
+
+  return <AppShell>
+    <PageHeading eyebrow="PATIENT TOOLS" title="AI Analysis" subtitle="Extract report details for your review. Analysis is based on your uploaded document and is not independently verified medical advice." />
+    <section className="card p-5 sm:p-6">
+      <label className="block max-w-2xl text-sm font-semibold text-slate-700">Choose an uploaded report
+        <select className="field mt-2" value={selectedId} disabled={loading || !documents.length} onChange={(event) => { setSelectedId(event.target.value); setError(''); setNotice('') }}>
+          {!documents.length && <option value="">No supported documents available</option>}
+          {documents.map((document) => <option key={document.id} value={document.id}>{document.title} · {document.fileType === 'application/pdf' ? 'PDF' : 'Image'}</option>)}
+        </select>
+      </label>
+      <div className="mt-4 flex flex-wrap items-center gap-3">
+        <button type="button" disabled={!selectedId || busy || ['pending', 'processing'].includes(analysis?.status) || Boolean(analysis?.confirmed)} onClick={() => begin(analysis?.status === 'completed')} className="btn-primary">
+          {busy || ['pending', 'processing'].includes(analysis?.status) ? <><LoaderCircle size={16} className="animate-spin"/> {busy ? 'Starting analysis…' : analysis?.status === 'processing' ? 'Analyzing report…' : 'Queued for analysis…'}</> : analysis?.confirmed ? 'Report already confirmed' : analysis?.status === 'completed' ? 'Re-analyze report' : analysis?.status === 'failed' ? 'Try analysis again' : 'Analyze Report'}
+        </button>
+        {analysis?.status === 'pending' && error && <button type="button" disabled={busy} onClick={() => begin(false)} className="btn-secondary">Retry start request</button>}
+        {selected && <Link to="/documents" className="btn-secondary">Manage documents</Link>}
+      </div>
+      {loading && <p role="status" className="mt-3 text-sm text-slate-500">Loading your documents…</p>}
+      {notice && <p role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
+      {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
+    </section>
+    {analysis && analysis.status !== 'not_requested' && <section className="card mt-5 p-5 sm:p-6">
+      <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Analysis results</h2><StatusBadge>{({ pending: 'Pending', processing: 'Processing', completed: 'Completed', failed: 'Failed' })[analysis.status] || analysis.status}</StatusBadge></div>
+      {analysis.status === 'failed' && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p>{failureMessage[analysis.lastErrorCode] || 'Analysis did not complete. Check your connection and retry.'}</p><button type="button" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { setAnalysis(await retryDocumentAnalysis(selectedId)) } catch (e) { setError(e.message) } finally { setBusy(false) } }} className="btn-secondary mt-3 !px-3 !py-2 text-xs">Retry analysis</button></div>}
+      {analysis.status === 'pending' && <p role="status" className="mt-3 text-sm text-slate-500">Your report is queued. You can leave this page; return to view the saved status and results.</p>}
+      {analysis.status === 'processing' && <p role="status" className="mt-3 flex items-center gap-2 text-sm text-slate-500"><LoaderCircle size={16} className="animate-spin text-teal"/> Extracting report information…</p>}
+      {analysis.status === 'completed' && <AnalysisPanel analysis={analysis} readOnly={false}
+        onSaveReview={(result) => saveDocumentAnalysisReview(selectedId, analysis.id, result).then(setAnalysis)}
+        onConfirm={(result) => confirmDocumentAnalysis(selectedId, analysis.id, result).then((value) => { setAnalysis(value.analysis); setNotice('Confirmed information was added to your medical timeline.') })}
+        onRetry={() => retryDocumentAnalysis(selectedId).then(setAnalysis)}
+        onReanalyze={() => begin(true)} />}
+      <p className="mt-5 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">AI-extracted from the selected document. This information is not independently verified medical advice. Missing or uncertain report details are left blank. Only information you confirm is added to your timeline.</p>
+      {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
+    </section>}
+  </AppShell>
+}
+
 function DocumentCard({ document, readOnly, deleting, opening, onOpen, onDelete }) {
   const date = new Date(document.uploadedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
   const size = document.fileSize < 1024 * 1024 ? Math.max(1, Math.round(document.fileSize / 1024)) + ' KB' : (document.fileSize / (1024 * 1024)).toFixed(1) + ' MB'
@@ -454,6 +554,42 @@ function DocumentCard({ document, readOnly, deleting, opening, onOpen, onDelete 
       </div>
     </article>
   )
+}
+
+export function AnalysisPanel({ analysis, readOnly, onSaveReview, onConfirm, onRetry, onReanalyze }) {
+  const [draft, setDraft] = useState(analysis?.result)
+  const [editing, setEditing] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const hasExtractedDetails = Boolean(draft && (draft.reportDate || draft.findings.length || draft.tests.length))
+  useEffect(() => { if (!editing) setDraft(analysis?.result) }, [analysis?.id, analysis?.result, editing])
+  const status = { pending: 'Pending', processing: 'Processing', completed: 'Completed', failed: 'Failed' }[analysis?.status || 'pending']
+  function updateTest(index, key, value) {
+    setEditing(true)
+    setDraft((current) => ({ ...current, tests: current.tests.map((test, i) => i === index ? { ...test, [key]: value, ...(key === 'name' ? { nameEvidence: null } : key === 'value' ? { valueEvidence: null } : key === 'unit' ? { unitEvidence: null } : key === 'referenceRange' ? { referenceRangeEvidence: null } : { abnormalFlagEvidence: null }) } : test) }))
+  }
+  async function run(action) { setBusy(true); setError(''); try { await action(); setEditing(false) } catch (e) { setError(e.message) } finally { setBusy(false) } }
+  return <section className="mt-4 border-t border-slate-100 pt-3" aria-label="Medical document analysis">
+    <div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">Document analysis</p><StatusBadge>{status}</StatusBadge></div>
+    {analysis?.status === 'failed' && !readOnly && <div className="mt-2"><p className="text-xs text-slate-500">Analysis could not be completed. Retry after checking the document and service availability.</p><button type="button" disabled={busy} onClick={() => run(onRetry)} className="btn-secondary mt-2 !px-3 !py-1.5 text-xs">Retry analysis</button></div>}
+    {analysis?.status === 'completed' && analysis.result && <>
+      {analysis.confirmed && <p className="mt-2 text-xs text-emerald-700">Reviewed and added to your medical timeline.</p>}
+      {!analysis.confirmed && !readOnly && <p className="mt-2 text-xs leading-5 text-slate-500">Review the extracted details. They are not added to your medical history until you confirm.</p>}
+      {draft && <div className="mt-2 space-y-2">
+        {!hasExtractedDetails && <p className="text-xs text-slate-500">No structured details were found. You can add a medical record manually.</p>}
+        <label className="block text-[11px] text-slate-500">Report date<input type="date" className="field mt-1 !px-2 !py-1.5 text-xs" disabled={readOnly || analysis.confirmed} value={draft.reportDate || ''} onChange={(e) => { setEditing(true); setDraft((current) => ({ ...current, reportDate: e.target.value || null, reportDateEvidence: null })) }}/></label>
+        {draft.findings.map((finding, index) => <div key={`f${index}`}><label className="block text-[11px] text-slate-500">Finding<textarea className="field mt-1 !px-2 !py-1.5 text-xs" disabled={readOnly || analysis.confirmed} value={finding.text} onChange={(e) => { setEditing(true); setDraft((current) => ({ ...current, findings: current.findings.map((entry, i) => i === index ? { ...entry, text: e.target.value, evidence: null } : entry) })) }}/></label>{!readOnly && !analysis.confirmed && <button type="button" onClick={() => { setEditing(true); setDraft((current) => ({ ...current, findings: current.findings.filter((_, i) => i !== index) })) }} className="mt-1 text-[11px] font-medium text-rose-700">Remove finding</button>}</div>)}
+        {draft.tests.map((test, index) => <div key={`t${index}`} className="rounded-lg bg-slate-50 p-2">
+          {['name', 'value', 'unit', 'referenceRange'].map((key) => <label key={key} className="block text-[11px] capitalize text-slate-500">{key === 'referenceRange' ? 'Reference range' : key === 'name' ? 'Test name' : key}<input className="field mt-1 !px-2 !py-1.5 text-xs" disabled={readOnly || analysis.confirmed} value={test[key] || ''} onChange={(e) => updateTest(index, key, e.target.value || null)}/></label>)}
+          <label className="mt-1 block text-[11px] text-slate-500">Report flag<select className="field mt-1 !px-2 !py-1.5 text-xs" disabled={readOnly || analysis.confirmed} value={test.abnormalFlag || ''} onChange={(e) => updateTest(index, 'abnormalFlag', e.target.value || null)}><option value="">Not stated</option>{['high', 'low', 'positive', 'negative', 'abnormal', 'normal'].map((flag) => <option key={flag} value={flag}>{flag}</option>)}</select></label>
+          {!readOnly && !analysis.confirmed && <button type="button" onClick={() => { setEditing(true); setDraft((current) => ({ ...current, tests: current.tests.filter((_, i) => i !== index) })) }} className="mt-2 text-[11px] font-medium text-rose-700">Remove test</button>}
+        </div>)}
+      </div>}
+      {!readOnly && !analysis.confirmed && <div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={busy || !draft} onClick={() => run(() => onSaveReview(draft))} className="btn-secondary !px-3 !py-1.5 text-xs">Save review</button><button type="button" disabled={busy || !hasExtractedDetails} onClick={() => run(() => onConfirm(draft))} className="btn-primary !px-3 !py-1.5 text-xs">Confirm and add to timeline</button></div>}
+      {!readOnly && !analysis.confirmed && onReanalyze && <button type="button" disabled={busy} onClick={() => run(onReanalyze)} className="mt-3 text-xs font-semibold text-teal hover:underline">Discard draft and re-analyze report</button>}
+    </>}
+    {error && <p role="alert" className="mt-2 text-xs text-rose-700">{error}</p>}
+  </section>
 }
 
 export function ConnectionsPage({ role = 'patient' }) {

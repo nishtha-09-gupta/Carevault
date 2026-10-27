@@ -8,6 +8,8 @@ import { createTemporaryFileUrl, deleteStoredDocument, uploadDocument } from '..
 import { getTitle, validateFileContents } from '../utils/documentValidation.js'
 import { MEDICAL_RECORD_CATEGORIES } from '../models/MedicalRecord.js'
 import { parseMedicalDate } from '../utils/healthRecords.js'
+import DocumentAnalysis from '../models/DocumentAnalysis.js'
+import { enqueueDocumentAnalysis } from '../services/documentAnalysisQueue.js'
 
 function toApiDocument(document) {
   const value = document.toObject()
@@ -21,6 +23,7 @@ function toApiDocument(document) {
     isDemoSample: Boolean(value.demoSeedKey),
     category: value.category || null,
     eventDate: value.eventDate || null,
+    analysisStatus: value.analysisStatus || (value.demoSeedKey ? 'not_requested' : 'pending'),
   }
 }
 
@@ -126,7 +129,14 @@ export async function uploadNewDocument(req, res) {
       fileSize: req.file.size,
       category: req.body.category || null,
       eventDate,
+      analysisStatus: 'pending',
     })
+    try {
+      await enqueueDocumentAnalysis(document)
+    } catch {
+      // The durable worker reconciles pending document rows if this insert is interrupted.
+      console.error('Document analysis enqueue deferred for a pending upload.')
+    }
     return res.status(201).json({ document: toApiDocument(document) })
   } catch (error) {
     if (storedFile.public_id) {
@@ -147,6 +157,7 @@ export async function deleteDocument(req, res) {
   if (!document) return res.status(404).json({ error: 'Document not found.' })
 
   await deleteStoredDocument(document.filePublicId)
+  await DocumentAnalysis.deleteOne({ documentId: document._id, ownerId: req.user.id })
   await MedicalRecord.updateMany({ ownerId: req.user.id, documentId: document._id }, { $set: { documentId: null } })
   await document.deleteOne()
   return res.json({ message: 'Document deleted.' })

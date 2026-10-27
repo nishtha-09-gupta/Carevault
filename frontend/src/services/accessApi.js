@@ -80,6 +80,12 @@ export async function fetchPatientDocumentFile(patientId, documentId) {
   return response.blob()
 }
 
+export async function fetchSharedDocumentAnalysis(patientId, documentId) {
+  const response = await patientDocumentsRequest(patientId, `/${encodeURIComponent(documentId)}/analysis`)
+  const payload = await response.json()
+  return payload.analysis
+}
+
 export async function fetchPatientHealthIntake(patientId) {
   const response = await fetch(apiUrl(`/api/doctor/patients/${encodeURIComponent(patientId)}/intake`), { credentials: 'include' })
   const body = await response.json().catch(() => ({}))

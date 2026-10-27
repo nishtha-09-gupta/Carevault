@@ -17,6 +17,7 @@ const documentSchema = new mongoose.Schema(
     fileSize: { type: Number, required: true, min: 1 },
     category: { type: String, enum: ['Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'], default: null },
     eventDate: { type: Date, default: null },
+    analysisStatus: { type: String, enum: ['not_requested', 'pending', 'processing', 'completed', 'failed'], default: 'pending' },
     uploadedAt: { type: Date, default: Date.now },
   },
   { timestamps: false },

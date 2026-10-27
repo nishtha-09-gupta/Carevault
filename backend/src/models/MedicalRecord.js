@@ -11,10 +11,12 @@ const medicalRecordSchema = new mongoose.Schema({
   eventDate: { type: Date, default: null },
   notes: { type: String, trim: true, maxlength: 5000, default: '' },
   documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Document', default: null },
+  analysisId: { type: mongoose.Schema.Types.ObjectId, ref: 'DocumentAnalysis', default: undefined },
 }, { timestamps: true })
 
 medicalRecordSchema.index({ ownerId: 1, eventDate: -1, createdAt: -1 })
 medicalRecordSchema.index({ documentId: 1 })
+medicalRecordSchema.index({ analysisId: 1 }, { unique: true, partialFilterExpression: { analysisId: { $type: 'objectId' } } })
 medicalRecordSchema.index({ ownerId: 1, demoSeedKey: 1 }, { unique: true, partialFilterExpression: { demoSeedKey: { $type: 'string' } } })
 
 export default mongoose.model('MedicalRecord', medicalRecordSchema)
