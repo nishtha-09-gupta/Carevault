@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useEffect, useState } from 'react'
-import { ArrowRight, LoaderCircle, Plus, Sparkles } from 'lucide-react'
+import { ArrowRight, FileText, LoaderCircle, Plus, Sparkles } from 'lucide-react'
 import AppShell from '../components/AppShell'
 import { PageHeading, RecordIcon, SectionTitle, StatCard, StatusBadge } from '../components/UI'
 import { useAuth } from '../components/AuthContext'
@@ -91,6 +91,10 @@ export function DoctorDashboard() {
       <section className="mb-7 grid gap-4 sm:grid-cols-2">
         <div className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">ACTIVE PATIENTS</p><p className="mt-3 text-3xl font-bold">{loadingPatients ? '—' : activePatients.length}</p><Link to="/doctor/patients" className="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-teal">Open patient list <ArrowRight size={15}/></Link></div>
         <div className="card p-6"><p className="text-xs font-semibold uppercase tracking-wider text-slate-400">RECORD ACCESS</p><p className="mt-3 text-sm leading-6 text-slate-600">You can view a patient’s CareVault documents while their access grant is active. Every document request is checked against the patient, doctor, and expiry.</p></div>
+      </section>
+      <section className="mb-7 grid gap-4 sm:grid-cols-2">
+        <Link to="/doctor/ai-analysis" className="card flex items-center gap-4 p-5 transition hover:border-teal/40 hover:shadow-sm"><span className="grid h-10 w-10 place-items-center rounded-xl bg-mint text-teal"><Sparkles size={18}/></span><span className="min-w-0 flex-1"><span className="block font-semibold">AI Analysis</span><span className="mt-1 block text-sm text-slate-500">Analyze individual reports patients shared with you.</span></span><ArrowRight size={16} className="text-teal"/></Link>
+        <Link to="/doctor/summaries" className="card flex items-center gap-4 p-5 transition hover:border-teal/40 hover:shadow-sm"><span className="grid h-10 w-10 place-items-center rounded-xl bg-lilac text-indigo-700"><FileText size={18}/></span><span className="min-w-0 flex-1"><span className="block font-semibold">Summaries</span><span className="mt-1 block text-sm text-slate-500">Review or generate a cited summary for an authorized patient.</span></span><ArrowRight size={16} className="text-teal"/></Link>
       </section>
       <section><h2 className="mb-4 font-semibold">Patients with active access</h2>
         {patientError ? <p role="alert" className="card p-5 text-sm text-rose-700">{patientError}</p>

@@ -3,6 +3,9 @@ import { Link, useSearchParams } from 'react-router-dom'
 import {
   CloudUpload,
   Download,
+  Eye,
+  Pencil,
+  ArrowRight,
   FileText,
   FlaskConical,
   LoaderCircle,
@@ -436,13 +439,15 @@ export function DocumentsPage({ role = 'patient' }) {
 }
 
 export function AIAnalysisPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const [documents, setDocuments] = useState([])
-  const [selectedId, setSelectedId] = useState('')
+  const [selectedId, setSelectedId] = useState(searchParams.get('document') || '')
   const [analysis, setAnalysis] = useState(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
+  const [preview, setPreview] = useState(null)
 
   useEffect(() => {
     let active = true
@@ -450,10 +455,14 @@ export function AIAnalysisPage() {
       if (!active) return
       const supported = items.filter((item) => ['application/pdf', 'image/jpeg', 'image/png'].includes(item.fileType))
       setDocuments(supported)
-      setSelectedId((current) => current && supported.some((item) => item.id === current) ? current : supported[0]?.id || '')
+      const requestedId = searchParams.get('document')
+      setSelectedId((current) => current && supported.some((item) => item.id === current) ? current : supported.some((item) => item.id === requestedId) ? requestedId : supported[0]?.id || '')
     }).catch((e) => { if (active) setError(e.message) }).finally(() => { if (active) setLoading(false) })
     return () => { active = false }
   }, [])
+
+  useEffect(() => { setSearchParams(selectedId ? { document: selectedId } : {}, { replace: true }) }, [selectedId])
+  useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url) }, [preview])
 
   useEffect(() => {
     let active = true
@@ -499,8 +508,17 @@ export function AIAnalysisPage() {
     } catch (e) { setError(e.message) } finally { setBusy(false) }
   }
 
+  async function openOriginal() {
+    if (!selected) return
+    setError('')
+    try {
+      const blob = await fetchDocumentFile(selected.id)
+      setPreview({ document: selected, url: URL.createObjectURL(blob) })
+    } catch (e) { setError(e.message) }
+  }
+
   return <AppShell>
-    <PageHeading eyebrow="PATIENT TOOLS" title="AI Analysis" subtitle="Extract report details for your review. Analysis is based on your uploaded document and is not independently verified medical advice." />
+    <PageHeading eyebrow="PATIENT TOOLS" title="AI Analysis" subtitle="Understand the details extracted from one report, review them, and decide whether to confirm them." />
     <section className="card p-5 sm:p-6">
       <label className="block max-w-2xl text-sm font-semibold text-slate-700">Choose an uploaded report
         <select className="field mt-2" value={selectedId} disabled={loading || !documents.length} onChange={(event) => { setSelectedId(event.target.value); setError(''); setNotice('') }}>
@@ -513,18 +531,20 @@ export function AIAnalysisPage() {
           {busy || ['pending', 'processing'].includes(analysis?.status) ? <><LoaderCircle size={16} className="animate-spin"/> {busy ? 'Starting analysis…' : analysis?.status === 'processing' ? 'Analyzing report…' : 'Queued for analysis…'}</> : analysis?.confirmed ? 'Report already confirmed' : analysis?.status === 'completed' ? 'Re-analyze report' : analysis?.status === 'failed' ? 'Try analysis again' : 'Analyze Report'}
         </button>
         {analysis?.status === 'pending' && error && <button type="button" disabled={busy} onClick={() => begin(false)} className="btn-secondary">Retry start request</button>}
+        {selected && <button type="button" onClick={openOriginal} className="btn-secondary"><Eye size={15}/>Open original report</button>}
         {selected && <Link to="/documents" className="btn-secondary">Manage documents</Link>}
       </div>
       {loading && <p role="status" className="mt-3 text-sm text-slate-500">Loading your documents…</p>}
       {notice && <p role="status" className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
       {error && <p role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
     </section>
+    {selected && <ReportOverviewCard document={selected} analysis={analysis} />}
     {analysis && analysis.status !== 'not_requested' && <section className="card mt-5 p-5 sm:p-6">
       <div className="flex flex-wrap items-center justify-between gap-2"><h2 className="font-semibold">Analysis results</h2><StatusBadge>{({ pending: 'Pending', processing: 'Processing', completed: 'Completed', failed: 'Failed' })[analysis.status] || analysis.status}</StatusBadge></div>
       {analysis.status === 'failed' && <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900"><p>{failureMessage[analysis.lastErrorCode] || 'Analysis did not complete. Check your connection and retry.'}</p><button type="button" disabled={busy} onClick={async () => { setBusy(true); setError(''); try { setAnalysis(await retryDocumentAnalysis(selectedId)) } catch (e) { setError(e.message) } finally { setBusy(false) } }} className="btn-secondary mt-3 !px-3 !py-2 text-xs">Retry analysis</button></div>}
       {analysis.status === 'pending' && <p role="status" className="mt-3 text-sm text-slate-500">Your report is queued. You can leave this page; return to view the saved status and results.</p>}
       {analysis.status === 'processing' && <p role="status" className="mt-3 flex items-center gap-2 text-sm text-slate-500"><LoaderCircle size={16} className="animate-spin text-teal"/> Extracting report information…</p>}
-      {analysis.status === 'completed' && <AnalysisPanel analysis={analysis} readOnly={false}
+      {analysis.status === 'completed' && <AnalysisPanel analysis={analysis} document={selected} readOnly={false}
         onSaveReview={(result) => saveDocumentAnalysisReview(selectedId, analysis.id, result).then(setAnalysis)}
         onConfirm={(result) => confirmDocumentAnalysis(selectedId, analysis.id, result).then((value) => { setAnalysis(value.analysis); setNotice('Confirmed information was added to your medical timeline.') })}
         onRetry={() => retryDocumentAnalysis(selectedId).then(setAnalysis)}
@@ -532,6 +552,7 @@ export function AIAnalysisPage() {
       <p className="mt-5 border-t border-slate-100 pt-4 text-xs leading-5 text-slate-500">AI-extracted from the selected document. This information is not independently verified medical advice. Missing or uncertain report details are left blank. Only information you confirm is added to your timeline.</p>
       {error && <p role="alert" className="mt-3 text-sm text-rose-700">{error}</p>}
     </section>}
+    <DocumentPreview preview={preview} onClose={() => setPreview(null)}/>
   </AppShell>
 }
 
@@ -556,12 +577,28 @@ function DocumentCard({ document, readOnly, deleting, opening, onOpen, onDelete 
   )
 }
 
-export function AnalysisPanel({ analysis, readOnly, onSaveReview, onConfirm, onRetry, onReanalyze }) {
+function ReportOverviewCard({ document, analysis }) {
+  const result = analysis?.result
+  const category = document?.category || null
+  const reportDate = result?.reportDate || document?.eventDate
+  const categoryNote = category === 'Lab result'
+    ? 'This document is categorized as a laboratory report. The extracted values below are copied from the report where supported; the analysis does not provide a separate clinical description of the report’s purpose.'
+    : category
+      ? `This document is categorized as “${category}”. The analysis does not provide a separate description of what it examines; review the original report alongside extracted details.`
+      : 'No report category or description was identified in the document details. Review the original report alongside any extracted details.'
+  return <section className="card mt-5 p-5 sm:p-6" aria-labelledby="report-overview-heading">
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><p className="eyebrow">REPORT OVERVIEW</p><h2 id="report-overview-heading" className="mt-1 text-lg font-semibold">{document?.title || document?.originalFileName}</h2><p className="mt-1 text-sm text-slate-500">{document?.originalFileName}</p></div><StatusBadge tone={analysis?.confirmed ? 'green' : 'gray'}>{analysis?.confirmed ? 'Patient-confirmed' : analysis?.status === 'completed' ? 'AI details unconfirmed' : 'Awaiting analysis'}</StatusBadge></div>
+    <dl className="mt-4 grid gap-3 border-t border-slate-100 pt-4 sm:grid-cols-3"><div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Document category</dt><dd className="mt-1 text-sm">{category || 'Not identified'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Report date</dt><dd className="mt-1 text-sm">{reportDate ? new Date(`${String(reportDate).slice(0, 10)}T00:00:00`).toLocaleDateString(undefined, { dateStyle: 'medium' }) : 'Not stated'}</dd></div><div><dt className="text-xs font-semibold uppercase tracking-wide text-slate-400">Analysis status</dt><dd className="mt-1 text-sm">{analysis?.status ? analysis.status[0].toUpperCase() + analysis.status.slice(1) : 'Not analyzed'}</dd></div></dl>
+    <p className="mt-4 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">{categoryNote}</p>
+  </section>
+}
+
+export function AnalysisPanel({ analysis, document, readOnly, onSaveReview, onConfirm, onRetry, onReanalyze }) {
   const [draft, setDraft] = useState(analysis?.result)
   const [editing, setEditing] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const hasExtractedDetails = Boolean(draft && (draft.reportDate || draft.findings.length || draft.tests.length))
+  const hasExtractedDetails = Boolean(draft && (draft.reportDate || draft.findings?.length || draft.tests?.length))
   useEffect(() => { if (!editing) setDraft(analysis?.result) }, [analysis?.id, analysis?.result, editing])
   const status = { pending: 'Pending', processing: 'Processing', completed: 'Completed', failed: 'Failed' }[analysis?.status || 'pending']
   function updateTest(index, key, value) {
@@ -569,24 +606,33 @@ export function AnalysisPanel({ analysis, readOnly, onSaveReview, onConfirm, onR
     setDraft((current) => ({ ...current, tests: current.tests.map((test, i) => i === index ? { ...test, [key]: value, ...(key === 'name' ? { nameEvidence: null } : key === 'value' ? { valueEvidence: null } : key === 'unit' ? { unitEvidence: null } : key === 'referenceRange' ? { referenceRangeEvidence: null } : { abnormalFlagEvidence: null }) } : test) }))
   }
   async function run(action) { setBusy(true); setError(''); try { await action(); setEditing(false) } catch (e) { setError(e.message) } finally { setBusy(false) } }
+  const tests = draft?.tests || []
+  const findings = draft?.findings || []
+  const attention = tests.filter((test) => ['high', 'low', 'abnormal'].includes(test.abnormalFlag))
+  const questions = attention.length
+    ? attention.slice(0, 3).map((test) => `The report marks ${test.name} as ${test.abnormalFlag}. What does this result mean in the context of my health?`)
+    : tests.slice(0, 2).map((test) => `Could you explain what the reported ${test.name}${test.value ? ` value of ${test.value}${test.unit ? ` ${test.unit}` : ''}` : ''} means for me?`)
   return <section className="mt-4 border-t border-slate-100 pt-3" aria-label="Medical document analysis">
-    <div className="flex items-center justify-between gap-2"><p className="text-xs font-semibold text-slate-700">Document analysis</p><StatusBadge>{status}</StatusBadge></div>
+    <div className="flex items-center justify-between gap-2"><h2 className="text-lg font-semibold text-ink">Analysis results</h2><StatusBadge>{status}</StatusBadge></div>
     {analysis?.status === 'failed' && !readOnly && <div className="mt-2"><p className="text-xs text-slate-500">Analysis could not be completed. Retry after checking the document and service availability.</p><button type="button" disabled={busy} onClick={() => run(onRetry)} className="btn-secondary mt-2 !px-3 !py-1.5 text-xs">Retry analysis</button></div>}
     {analysis?.status === 'completed' && analysis.result && <>
-      {analysis.confirmed && <p className="mt-2 text-xs text-emerald-700">Reviewed and added to your medical timeline.</p>}
-      {!analysis.confirmed && !readOnly && <p className="mt-2 text-xs leading-5 text-slate-500">Review the extracted details. They are not added to your medical history until you confirm.</p>}
-      {draft && <div className="mt-2 space-y-2">
-        {!hasExtractedDetails && <p className="text-xs text-slate-500">No structured details were found. You can add a medical record manually.</p>}
-        <label className="block text-[11px] text-slate-500">Report date<input type="date" className="field mt-1 !px-2 !py-1.5 text-xs" disabled={readOnly || analysis.confirmed} value={draft.reportDate || ''} onChange={(e) => { setEditing(true); setDraft((current) => ({ ...current, reportDate: e.target.value || null, reportDateEvidence: null })) }}/></label>
-        {draft.findings.map((finding, index) => <div key={`f${index}`}><label className="block text-[11px] text-slate-500">Finding<textarea className="field mt-1 !px-2 !py-1.5 text-xs" disabled={readOnly || analysis.confirmed} value={finding.text} onChange={(e) => { setEditing(true); setDraft((current) => ({ ...current, findings: current.findings.map((entry, i) => i === index ? { ...entry, text: e.target.value, evidence: null } : entry) })) }}/></label>{!readOnly && !analysis.confirmed && <button type="button" onClick={() => { setEditing(true); setDraft((current) => ({ ...current, findings: current.findings.filter((_, i) => i !== index) })) }} className="mt-1 text-[11px] font-medium text-rose-700">Remove finding</button>}</div>)}
-        {draft.tests.map((test, index) => <div key={`t${index}`} className="rounded-lg bg-slate-50 p-2">
-          {['name', 'value', 'unit', 'referenceRange'].map((key) => <label key={key} className="block text-[11px] capitalize text-slate-500">{key === 'referenceRange' ? 'Reference range' : key === 'name' ? 'Test name' : key}<input className="field mt-1 !px-2 !py-1.5 text-xs" disabled={readOnly || analysis.confirmed} value={test[key] || ''} onChange={(e) => updateTest(index, key, e.target.value || null)}/></label>)}
-          <label className="mt-1 block text-[11px] text-slate-500">Report flag<select className="field mt-1 !px-2 !py-1.5 text-xs" disabled={readOnly || analysis.confirmed} value={test.abnormalFlag || ''} onChange={(e) => updateTest(index, 'abnormalFlag', e.target.value || null)}><option value="">Not stated</option>{['high', 'low', 'positive', 'negative', 'abnormal', 'normal'].map((flag) => <option key={flag} value={flag}>{flag}</option>)}</select></label>
-          {!readOnly && !analysis.confirmed && <button type="button" onClick={() => { setEditing(true); setDraft((current) => ({ ...current, tests: current.tests.filter((_, i) => i !== index) })) }} className="mt-2 text-[11px] font-medium text-rose-700">Remove test</button>}
-        </div>)}
+      {analysis.confirmed && <p className="mt-3 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-800">You confirmed these details. They are linked to your medical timeline.</p>}
+      {!analysis.confirmed && !readOnly && <p className="mt-3 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">AI-extracted and not yet confirmed. Review these details; they will not enter your medical timeline unless you confirm them.</p>}
+      {draft && <div className="mt-5 space-y-6">
+        <section aria-labelledby="key-findings"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><h3 id="key-findings" className="font-semibold">Key findings</h3>{!readOnly && !analysis.confirmed && <button type="button" className="text-sm font-semibold text-teal" onClick={() => setEditing((value) => !value)}><Pencil size={14}/>{editing ? 'Stop editing' : 'Edit extracted details'}</button>}</div>
+          {tests.length ? <div className="overflow-x-auto rounded-xl border border-slate-100"><table className="w-full min-w-[620px] text-left text-sm"><thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2.5">Test</th><th className="px-3 py-2.5">Reported value</th><th className="px-3 py-2.5">Reference range</th><th className="px-3 py-2.5">Report flag</th></tr></thead><tbody className="divide-y divide-slate-100">{tests.map((test, index) => <tr key={`test-${index}`}><td className="px-3 py-3 font-medium">{test.name || 'Not stated'}{[test.nameEvidence].filter(Boolean).length > 0 && <span className="mt-1 block max-w-xs text-xs font-normal leading-5 text-slate-500">Source: {test.nameEvidence}</span>}</td><td className="px-3 py-3">{test.value ?? 'Not stated'}{test.unit ? ` ${test.unit}` : ''}{test.valueEvidence && <span className="mt-1 block max-w-xs text-xs leading-5 text-slate-500">Source: {test.valueEvidence}</span>}{test.unitEvidence && <span className="mt-1 block max-w-xs text-xs leading-5 text-slate-500">Unit source: {test.unitEvidence}</span>}</td><td className="px-3 py-3">{test.referenceRange || 'Not stated'}{test.referenceRangeEvidence && <span className="mt-1 block max-w-xs text-xs leading-5 text-slate-500">Source: {test.referenceRangeEvidence}</span>}</td><td className="px-3 py-3">{test.abnormalFlag ? <>{test.abnormalFlagEvidence && <span className="mb-1 block max-w-xs text-xs leading-5 text-slate-500">Source: {test.abnormalFlagEvidence}</span>}<StatusBadge tone={test.abnormalFlag === 'normal' ? 'green' : ['high', 'low', 'abnormal'].includes(test.abnormalFlag) ? 'amber' : 'gray'}>{test.abnormalFlag}</StatusBadge></> : <span className="text-slate-400">Not stated</span>}</td></tr>)}</tbody></table></div> : <p className="rounded-xl bg-slate-50 p-3 text-sm text-slate-600">No structured test values were extracted from this report.</p>}
+          {findings.length > 0 && <div className="mt-3 space-y-2">{findings.map((finding, index) => <article key={`finding-${index}`} className="rounded-xl border border-slate-100 p-3"><p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Report finding</p><p className="mt-1 text-sm leading-6 text-slate-700">{finding.text}</p>{finding.evidence && <p className="mt-2 text-xs text-slate-500">Source text: “{finding.evidence}”</p>}</article>)}</div>}
+          {draft.reportDate && <p className="mt-3 text-xs text-slate-500">Report date: {draft.reportDate}</p>}
+        </section>
+        <section aria-labelledby="plain-language"><h3 id="plain-language" className="font-semibold">What this means</h3><p className="mt-2 text-sm leading-6 text-slate-600">The list above shows information found in the report. A report flag describes how the source labels a result; it does not by itself establish a diagnosis. The analysis does not know your full health context, so discuss questions or unclear terms with your clinician.</p>{attention.length > 0 && <ul className="mt-3 space-y-2">{attention.map((test, index) => <li key={index} className="rounded-xl bg-amber-50 p-3 text-sm leading-6 text-amber-950"><strong>{test.name}: {test.abnormalFlag}.</strong> This is the report’s own flag{test.referenceRange ? ` (reference range: ${test.referenceRange})` : ', and no reference range was provided'}. A clinician can explain its meaning for you.</li>)}</ul>}</section>
+        <section aria-labelledby="attention"><h3 id="attention" className="font-semibold">Needs attention</h3>{attention.length > 0 ? <p className="mt-2 text-sm text-slate-600">The report explicitly flags {attention.length} result{attention.length === 1 ? '' : 's'}. This is not a severity rating or diagnosis.</p> : <p className="mt-2 rounded-xl bg-slate-50 p-3 text-sm leading-6 text-slate-600">The extracted results did not include an explicit abnormal flag. This does not establish that every result is normal; the original report and clinician interpretation remain important.</p>}</section>
+        {questions.length > 0 && <section aria-labelledby="doctor-questions"><h3 id="doctor-questions" className="font-semibold">Questions for your doctor</h3><ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-slate-600">{questions.map((question, index) => <li key={index}>{question}</li>)}</ul></section>}
+        {editing && <section className="rounded-xl border border-teal/20 bg-teal-50/40 p-4"><h3 className="font-semibold">Edit details before saving your review</h3><label className="mt-3 block text-xs font-medium text-slate-600">Report date<input type="date" className="field mt-1" value={draft.reportDate || ''} onChange={(e) => setDraft((current) => ({ ...current, reportDate: e.target.value || null, reportDateEvidence: null }))}/></label>
+          {findings.map((finding, index) => <label key={`edit-f${index}`} className="mt-3 block text-xs font-medium text-slate-600">Finding<textarea className="field mt-1" value={finding.text} onChange={(e) => setDraft((current) => ({ ...current, findings: current.findings.map((entry, i) => i === index ? { ...entry, text: e.target.value, evidence: null } : entry) }))}/><button type="button" className="mt-1 text-xs text-rose-700" onClick={() => setDraft((current) => ({ ...current, findings: current.findings.filter((_, i) => i !== index) }))}>Remove finding</button></label>)}
+          {tests.map((test, index) => <fieldset key={`edit-t${index}`} className="mt-3 grid gap-2 rounded-lg border border-slate-200 bg-white p-3 sm:grid-cols-2"><legend className="px-1 text-xs font-semibold">Test {index + 1}</legend>{['name', 'value', 'unit', 'referenceRange'].map((key) => <label key={key} className="text-xs font-medium capitalize text-slate-600">{key === 'referenceRange' ? 'Reference range' : key === 'name' ? 'Test name' : key}<input className="field mt-1" value={test[key] || ''} onChange={(e) => updateTest(index, key, e.target.value || null)}/></label>)}<label className="text-xs font-medium text-slate-600">Report flag<select className="field mt-1" value={test.abnormalFlag || ''} onChange={(e) => updateTest(index, 'abnormalFlag', e.target.value || null)}><option value="">Not stated</option>{['high', 'low', 'positive', 'negative', 'abnormal', 'normal'].map((flag) => <option key={flag} value={flag}>{flag}</option>)}</select></label><button type="button" className="self-end text-left text-xs text-rose-700" onClick={() => setDraft((current) => ({ ...current, tests: current.tests.filter((_, i) => i !== index) }))}>Remove test</button></fieldset>)}
+        </section>}
+        {!readOnly && !analysis.confirmed && <div className="flex flex-wrap gap-2 border-t border-slate-100 pt-4">{editing && <button type="button" disabled={busy || !draft} onClick={() => run(() => onSaveReview(draft))} className="btn-secondary">Save review</button>}<button type="button" disabled={busy || !hasExtractedDetails} onClick={() => run(() => onConfirm(draft))} className="btn-primary">Confirm and add to timeline</button>{onReanalyze && <button type="button" disabled={busy} onClick={() => run(onReanalyze)} className="btn-secondary">Discard edits and re-analyze</button>}</div>}
       </div>}
-      {!readOnly && !analysis.confirmed && <div className="mt-3 flex flex-wrap gap-2"><button type="button" disabled={busy || !draft} onClick={() => run(() => onSaveReview(draft))} className="btn-secondary !px-3 !py-1.5 text-xs">Save review</button><button type="button" disabled={busy || !hasExtractedDetails} onClick={() => run(() => onConfirm(draft))} className="btn-primary !px-3 !py-1.5 text-xs">Confirm and add to timeline</button></div>}
-      {!readOnly && !analysis.confirmed && onReanalyze && <button type="button" disabled={busy} onClick={() => run(onReanalyze)} className="mt-3 text-xs font-semibold text-teal hover:underline">Discard draft and re-analyze report</button>}
     </>}
     {error && <p role="alert" className="mt-2 text-xs text-rose-700">{error}</p>}
   </section>

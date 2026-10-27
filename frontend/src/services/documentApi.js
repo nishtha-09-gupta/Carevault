@@ -11,10 +11,11 @@ async function readJson(response) {
 }
 
 async function apiRequest(url, options = {}) {
-  const timeoutSignal = AbortSignal.timeout(30000)
-  const signal = options.signal ? AbortSignal.any([options.signal, timeoutSignal]) : timeoutSignal
+  const { timeoutMs = 30000, ...requestOptions } = options
+  const configuredTimeoutSignal = AbortSignal.timeout(timeoutMs)
+  const signal = requestOptions.signal ? AbortSignal.any([requestOptions.signal, configuredTimeoutSignal]) : configuredTimeoutSignal
   try {
-    return await readJson(await fetch(url, { credentials: 'include', ...options, signal }))
+    return await readJson(await fetch(url, { credentials: 'include', ...requestOptions, signal }))
   } catch (error) {
     // Caller aborts (for example React StrictMode effect cleanup or navigation)
     // must stay identifiable so page handlers can ignore them. Only the timeout

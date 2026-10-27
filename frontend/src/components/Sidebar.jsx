@@ -12,6 +12,7 @@ import {
   ClipboardList,
   LockKeyhole,
   Sparkles,
+  ClipboardCheck,
 } from 'lucide-react'
 import Brand from './Brand'
 import { useAuth } from './AuthContext'
@@ -32,6 +33,8 @@ const doctorItems = [
   { to: '/doctor', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/doctor/patients', label: 'Patients', icon: UsersRound },
   { to: '/doctor/documents', label: 'Documents', icon: FolderOpen },
+  { to: '/doctor/ai-analysis', label: 'AI Analysis', icon: Sparkles },
+  { to: '/doctor/summaries', label: 'Summaries', icon: ClipboardCheck },
 ]
 
 export default function Sidebar({ role = 'patient', open = false, onClose }) {

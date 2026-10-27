@@ -1,5 +1,6 @@
 import Groq from 'groq-sdk'
 import { performance } from 'node:perf_hooks'
+import { z } from 'zod'
 import { medicalAnalysisJsonSchema, validateGroundedAnalysis } from './medicalAnalysisSchema.js'
 
 // Groq's current strict JSON Schema support list, verified in its official docs.
@@ -50,4 +51,85 @@ export async function analyzeMedicalText(text, { client = groq, env = process.en
   schemaValidationMs = performance.now() - validationStartedAt
   onMetrics({ requestMs, schemaValidationMs, promptTokens: usage?.prompt_tokens ?? null, completionTokens: usage?.completion_tokens ?? null })
   return grounded
+}
+
+export const medicalSummaryJsonSchema = {
+  type: 'object', additionalProperties: false, required: ['overview', 'keyPoints', 'medications', 'allergies', 'insufficientInformation'],
+  properties: {
+    overview: { anyOf: [
+      { type: 'null' },
+      { type: 'object', additionalProperties: false, required: ['text', 'sourceIds', 'evidence'], properties: { text: { type: 'string' }, sourceIds: { type: 'array', items: { type: 'string' } }, evidence: { type: 'string' } } },
+    ] },
+    keyPoints: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'sourceIds', 'evidence'], properties: { text: { type: 'string' }, sourceIds: { type: 'array', items: { type: 'string' } }, evidence: { type: 'string' } } } },
+    medications: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'sourceIds', 'evidence'], properties: { text: { type: 'string' }, sourceIds: { type: 'array', items: { type: 'string' } }, evidence: { type: 'string' } } } },
+    allergies: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['text', 'sourceIds', 'evidence'], properties: { text: { type: 'string' }, sourceIds: { type: 'array', items: { type: 'string' } }, evidence: { type: 'string' } } } },
+    insufficientInformation: { type: 'boolean' },
+  },
+}
+
+export function classifyGroqRequestError(error) {
+  const status = Number(error?.status ?? error?.response?.status)
+  if (status === 401 || status === 403) return 'GROQ_AUTH_FAILED'
+  if (status === 404) return 'GROQ_MODEL_UNAVAILABLE'
+  if (status === 408 || status === 504 || error?.name === 'TimeoutError' || error?.name === 'APIConnectionTimeoutError') return 'GROQ_TIMEOUT'
+  if (status === 429) return 'GROQ_RATE_LIMITED'
+  if (status === 413) return 'GROQ_INPUT_TOO_LARGE'
+  if (status === 400 || status === 422) return 'GROQ_REQUEST_REJECTED'
+  if (status >= 500) return 'GROQ_TEMPORARY_FAILURE'
+  const networkCode = String(error?.cause?.code || error?.code || '').toUpperCase()
+  if (error?.name === 'APIConnectionError' || ['ECONNRESET', 'ECONNREFUSED', 'ENOTFOUND', 'EAI_AGAIN', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(networkCode)) return 'GROQ_CONNECTION_ERROR'
+  return 'GROQ_REQUEST_FAILED'
+}
+
+function comparableSourceText(value) {
+  return String(value || '').normalize('NFKC').toLocaleLowerCase().replace(/\s+/g, ' ').trim()
+}
+
+// Summaries cite only supplied source IDs. Status/verification labels are assigned
+// by the server from source metadata, never by model output.
+export async function generateMedicalSummary(sources, { client = groq, env = process.env } = {}) {
+  const model = validateModelConfiguration(env)
+  const sourceIds = new Set(sources.map((source) => source.id))
+  let response
+  try {
+    response = await client.chat.completions.create({
+      model, temperature: 0,
+      messages: [
+      { role: 'system', content: 'Create a concise extractive summary using only supplied sources. Never diagnose, recommend treatment, infer missing details, paraphrase, or merge contradictory facts. For the overview and every key point, medication, or allergy, provide a short exact quote from one cited source as evidence. Use only source IDs provided in the input. Distinguish confirmed patient/clinician records from unconfirmed AI extractions by selecting appropriate sources; verification labels are assigned by the application. If evidence is insufficient, return a null overview, empty lists, and set insufficientInformation true. Return only the required structured object.' },
+        { role: 'user', content: JSON.stringify(sources) },
+      ],
+      response_format: { type: 'json_schema', json_schema: { name: 'authorized_medical_summary', strict: true, schema: medicalSummaryJsonSchema } },
+    })
+  } catch (error) {
+    const code = classifyGroqRequestError(error)
+    const normalized = new Error('The Groq summary request could not be completed.')
+    normalized.code = code
+    normalized.retryable = ['GROQ_TIMEOUT', 'GROQ_RATE_LIMITED', 'GROQ_TEMPORARY_FAILURE', 'GROQ_CONNECTION_ERROR', 'GROQ_REQUEST_FAILED'].includes(code)
+    throw normalized
+  }
+  const message = response.choices?.[0]?.message?.content
+  if (!message || response.choices?.[0]?.finish_reason === 'length') throw Object.assign(new Error('Groq did not return a complete summary.'), { code: 'GROQ_EMPTY_RESPONSE', retryable: false })
+  let data
+  try { data = JSON.parse(message) } catch { throw Object.assign(new Error('Groq returned malformed summary data.'), { code: 'GROQ_MALFORMED_RESPONSE', retryable: false }) }
+  const item = z.object({ text: z.string().trim().min(1).max(1200), sourceIds: z.array(z.string().min(1)).min(1).max(20), evidence: z.string().trim().min(1).max(1000) }).strict()
+  const schema = z.object({ overview: item.nullable(), keyPoints: z.array(item).max(20), medications: z.array(item).max(20), allergies: z.array(item).max(20), insufficientInformation: z.boolean() }).strict()
+  const parsed = schema.safeParse(data)
+  if (!parsed.success) throw Object.assign(new Error('Groq returned summary data outside the expected schema.'), { code: 'GROQ_SCHEMA_INVALID', retryable: false })
+  function groundedEntry(entry) {
+    if (!entry.sourceIds.every((id) => sourceIds.has(id))) throw Object.assign(new Error('Groq cited an unavailable source.'), { code: 'GROQ_SOURCE_ID_INVALID', retryable: false })
+    const evidence = comparableSourceText(entry.evidence)
+    const source = sources.find((candidate) => entry.sourceIds.includes(candidate.id) && comparableSourceText(candidate.text).includes(evidence))
+    if (!source) throw Object.assign(new Error('Groq returned a summary without a matching source excerpt.'), { code: 'GROQ_SOURCE_EVIDENCE_INVALID', retryable: false })
+    // Never persist model-authored wording that has not been grounded. Use the
+    // cited source excerpt itself as the displayed statement, tolerating only
+    // Unicode normalization and whitespace differences during matching.
+    return { text: entry.evidence.trim(), evidence: entry.evidence.trim(), sourceIds: [source.id] }
+  }
+  return {
+    overview: parsed.data.overview ? groundedEntry(parsed.data.overview) : null,
+    keyPoints: parsed.data.keyPoints.map(groundedEntry),
+    medications: parsed.data.medications.map(groundedEntry),
+    allergies: parsed.data.allergies.map(groundedEntry),
+    insufficientInformation: parsed.data.insufficientInformation || (!parsed.data.overview && !parsed.data.keyPoints.length && !parsed.data.medications.length && !parsed.data.allergies.length),
+  }
 }

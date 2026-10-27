@@ -66,8 +66,61 @@ export async function getSharedDocumentAnalysis(req, res) {
   const document = await Document.findOne({ _id: req.params.documentId, ownerId: req.params.patientId }).select('_id analysisStatus +demoSeedKey')
   if (!document) return res.status(404).json({ error: 'Analysis not found.' })
   const analysis = await DocumentAnalysis.findOne({ documentId: document._id, ownerId: req.params.patientId })
+  if (!await findActivePatientGrant(req.params.patientId, req.user.id)) return res.status(403).json({ error: 'The patient has not granted you active access.' })
   res.setHeader('Cache-Control', 'private, no-store')
   return res.json({ analysis: analysis ? apiAnalysis(analysis) : { id: null, status: document.analysisStatus, result: null, confirmed: false } })
+}
+
+// Doctors may request the same patient-owned job, but never review or confirm it.
+// Every call rechecks the active grant and scopes the document and job to the patient.
+export async function startSharedDocumentAnalysis(req, res) {
+  if (req.user.role !== 'doctor') return res.status(403).json({ error: 'Only doctors can analyze shared patient reports.' })
+  const { patientId, documentId } = req.params
+  if (!mongoose.isValidObjectId(patientId) || !mongoose.isValidObjectId(documentId)) return res.status(404).json({ error: 'Document not found.' })
+  const grant = await findActivePatientGrant(patientId, req.user.id)
+  if (!grant) return res.status(403).json({ error: 'The patient has not granted you active access.' })
+  const document = await Document.findOne({ _id: documentId, ownerId: patientId }).select('+demoSeedKey')
+  if (!document) return res.status(404).json({ error: 'Document not found.' })
+  let analysis = await DocumentAnalysis.findOne({ documentId: document._id, ownerId: patientId })
+  if (analysis?.status === 'completed') {
+    if (!await findActivePatientGrant(patientId, req.user.id)) return res.status(403).json({ error: 'The patient has not granted you active access.' })
+    res.setHeader('Cache-Control', 'private, no-store')
+    return res.json({ analysis: apiAnalysis(analysis) })
+  }
+  if (analysis?.status === 'failed') {
+    analysis.status = 'pending'; analysis.attempts = 0; analysis.lastErrorCode = null
+    analysis.nextAttemptAt = new Date(); analysis.leaseUntil = null; analysis.leaseToken = undefined
+    await analysis.save()
+  } else if (!analysis) {
+    try { analysis = await requestDocumentAnalysis(document) }
+    catch (error) {
+      if (error?.code === 'UNSUPPORTED_DOCUMENT_TYPE') return res.status(400).json({ error: error.message })
+      throw error
+    }
+  }
+  if (analysis.status === 'pending') kickDocumentAnalysis(document._id, patientId)
+  // Avoid returning data after a grant is revoked during the request.
+  if (!await findActivePatientGrant(patientId, req.user.id)) return res.status(403).json({ error: 'The patient has not granted you active access.' })
+  res.setHeader('Cache-Control', 'private, no-store')
+  return res.status(202).json({ analysis: apiAnalysis(analysis) })
+}
+
+export async function retrySharedDocumentAnalysis(req, res) {
+  if (req.user.role !== 'doctor') return res.status(403).json({ error: 'Only doctors can retry shared patient analysis.' })
+  const { patientId, documentId } = req.params
+  if (!mongoose.isValidObjectId(patientId) || !mongoose.isValidObjectId(documentId)) return res.status(404).json({ error: 'Analysis not found.' })
+  if (!await findActivePatientGrant(patientId, req.user.id)) return res.status(403).json({ error: 'The patient has not granted you active access.' })
+  const document = await Document.findOne({ _id: documentId, ownerId: patientId }).select('_id')
+  if (!document) return res.status(404).json({ error: 'Analysis not found.' })
+  const analysis = await DocumentAnalysis.findOne({ documentId: document._id, ownerId: patientId })
+  if (!analysis || analysis.status !== 'failed' || analysis.confirmedAt) return res.status(409).json({ error: 'Only failed, unconfirmed analysis can be retried.' })
+  analysis.status = 'pending'; analysis.attempts = 0; analysis.lastErrorCode = null; analysis.nextAttemptAt = new Date(); analysis.leaseUntil = null; analysis.leaseToken = undefined
+  await analysis.save()
+  await Document.updateOne({ _id: document._id, ownerId: patientId }, { $set: { analysisStatus: 'pending' } })
+  kickDocumentAnalysis(document._id, patientId)
+  if (!await findActivePatientGrant(patientId, req.user.id)) return res.status(403).json({ error: 'The patient has not granted you active access.' })
+  res.setHeader('Cache-Control', 'private, no-store')
+  return res.status(202).json({ analysis: apiAnalysis(analysis) })
 }
 
 export async function reviewDocumentAnalysis(req, res) {

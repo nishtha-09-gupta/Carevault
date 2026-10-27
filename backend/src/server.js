@@ -8,6 +8,7 @@ import { demoAccessEnabled, seedDemoAccounts } from './services/demoSeed.js'
 import { startDocumentAnalysisWorker } from './services/documentAnalysisQueue.js'
 import DocumentAnalysis from './models/DocumentAnalysis.js'
 import MedicalRecord from './models/MedicalRecord.js'
+import PatientSummary from './models/PatientSummary.js'
 
 const port = Number(process.env.PORT) || 4000
 
@@ -32,6 +33,7 @@ try {
   configureCloudinary()
   await connectDatabase()
   await DocumentAnalysis.init()
+  await PatientSummary.init()
   await MedicalRecord.collection.createIndex({ analysisId: 1 }, { unique: true, partialFilterExpression: { analysisId: { $type: 'objectId' } } })
   startDocumentAnalysisWorker()
   if (demoAccessEnabled()) await seedDemoAccounts()

@@ -8,6 +8,8 @@ import IntakePage from './pages/IntakePage'
 import SharingPage from './pages/SharingPage'
 import SettingsPage from './pages/SettingsPage'
 import { DoctorPatientPage, DoctorPatientsPage } from './pages/DoctorPatientsPage'
+import DoctorAIAnalysisPage from './pages/DoctorAIAnalysisPage'
+import DoctorSummariesPage from './pages/DoctorSummariesPage'
 
 function NotFound() {
   return (
@@ -53,6 +55,8 @@ function AppRoutes() {
       <Route path="/doctor" element={<Workspace role="doctor"><DoctorDashboard /></Workspace>} />
       <Route path="/doctor/patients" element={<Workspace role="doctor"><DoctorPatientsPage /></Workspace>} />
       <Route path="/doctor/patients/:patientId" element={<Workspace role="doctor"><DoctorPatientPage /></Workspace>} />
+      <Route path="/doctor/ai-analysis" element={<Workspace role="doctor"><DoctorAIAnalysisPage /></Workspace>} />
+      <Route path="/doctor/summaries" element={<Workspace role="doctor"><DoctorSummariesPage /></Workspace>} />
       <Route path="/records" element={<Workspace role="patient"><RecordsPage /></Workspace>} />
       <Route path="/doctor/records" element={<Navigate to="/doctor/patients" replace />} />
       <Route path="/timeline" element={<Workspace role="patient"><TimelinePage /></Workspace>} />

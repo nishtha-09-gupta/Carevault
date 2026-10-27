@@ -86,6 +86,41 @@ export async function fetchSharedDocumentAnalysis(patientId, documentId) {
   return payload.analysis
 }
 
+async function doctorPatientRequest(patientId, suffix, options = {}) {
+  const { timeoutMs = 30000, ...requestOptions } = options
+  let response
+  try {
+    response = await fetch(apiUrl(`/api/doctor/patients/${encodeURIComponent(patientId)}${suffix}`), {
+      ...requestOptions, credentials: 'include', signal: requestOptions.signal || AbortSignal.timeout(timeoutMs),
+      headers: requestOptions.body ? { 'Content-Type': 'application/json', ...requestOptions.headers } : requestOptions.headers,
+    })
+  } catch (error) {
+    if (error?.name === 'TimeoutError' || error?.name === 'AbortError') throw new Error('The request timed out. Check your connection, refresh the status, and retry if needed.')
+    throw error
+  }
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || 'The patient request could not be completed.')
+  return payload
+}
+
+export async function startSharedDocumentAnalysis(patientId, documentId) {
+  const payload = await doctorPatientRequest(patientId, `/documents/${encodeURIComponent(documentId)}/analysis`, { method: 'POST', body: '{}' })
+  return payload.analysis
+}
+
+export async function retrySharedDocumentAnalysis(patientId, documentId) {
+  const payload = await doctorPatientRequest(patientId, `/documents/${encodeURIComponent(documentId)}/analysis/retry`, { method: 'POST', body: '{}' })
+  return payload.analysis
+}
+
+export async function fetchPatientSummary(patientId) {
+  return doctorPatientRequest(patientId, '/summary')
+}
+
+export async function generatePatientSummary(patientId, { refresh = false } = {}) {
+  return doctorPatientRequest(patientId, '/summary', { method: 'POST', body: JSON.stringify({ refresh }), timeoutMs: 70000 })
+}
+
 export async function fetchPatientHealthIntake(patientId) {
   const response = await fetch(apiUrl(`/api/doctor/patients/${encodeURIComponent(patientId)}/intake`), { credentials: 'include' })
   const body = await response.json().catch(() => ({}))
