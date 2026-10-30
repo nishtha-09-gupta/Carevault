@@ -672,14 +672,14 @@ export function AuthPage({ mode = 'login' }) {
             </p>
           </form>
 
-          {!signup && <div className="mt-4 border-t border-slate-100 pt-4">
+          <div className="mt-4 border-t border-slate-100 pt-4">
             <p className="mb-3 text-center text-sm font-semibold">Want to explore CareVault?</p>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" disabled={submitting} onClick={() => openDemo('patient')} className="btn-secondary justify-center !px-2 text-xs disabled:opacity-50">Demo Patient</button>
               <button type="button" disabled={submitting} onClick={() => openDemo('doctor')} className="btn-secondary justify-center !px-2 text-xs disabled:opacity-50">Demo Doctor</button>
             </div>
             <p className="mt-2 text-center text-xs text-slate-400">Explore fictional sample records in demo accounts.</p>
-          </div>}
+          </div>
 
           <p className="mt-5 text-center text-sm text-slate-500">
             {signup ? 'Already have an account?' : 'New to CareVault?'}{' '}
