@@ -35,7 +35,6 @@ export function RecordsPage({ role = 'patient' }) {
   const [category, setCategory] = useState('All types')
   const [records, setRecords] = useState([])
   const [documents, setDocuments] = useState([])
-  const [isDemoAccount, setIsDemoAccount] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null)
@@ -46,7 +45,7 @@ export function RecordsPage({ role = 'patient' }) {
   if (role === 'doctor') return <DocumentsPage role="doctor" />
   useEffect(() => {
     const controller = new AbortController()
-    fetchMedicalRecords(controller.signal).then((payload) => { setRecords(payload.records); setDocuments(payload.documents); setIsDemoAccount(payload.isDemoAccount) }).catch((e) => { if (e.name !== 'AbortError') setError(e.message) }).finally(() => setLoading(false))
+    fetchMedicalRecords(controller.signal).then((payload) => { setRecords(payload.records); setDocuments(payload.documents) }).catch((e) => { if (e.name !== 'AbortError') setError(e.message) }).finally(() => setLoading(false))
     return () => controller.abort()
   }, [revision])
   const visibleRecords = records.filter((r) => [r.title, r.provider, r.category, r.notes].join(' ').toLowerCase().includes(query.toLowerCase()) && (category === 'All types' || r.category === category))
@@ -72,7 +71,6 @@ export function RecordsPage({ role = 'patient' }) {
       />
       {error && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
       {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}
-      {isDemoAccount && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Fictional demo sample records are included for exploring CareVault.</p>}
       {editing && <form onSubmit={submitRecord} className="card mb-5 grid gap-3 p-5 sm:grid-cols-2">
         <label className="text-xs font-semibold">Title<input required maxLength="180" name="title" defaultValue={editing.title || ''} className="field mt-1" /></label>
         <label className="text-xs font-semibold">Category<select name="category" defaultValue={editing.category || 'Other'} className="field mt-1">{['Lab result', 'Visit summary', 'Medication', 'Prescription', 'Imaging', 'Other'].map((item) => <option key={item}>{item}</option>)}</select></label>
@@ -147,8 +145,8 @@ export function RecordsPage({ role = 'patient' }) {
 
 export function TimelinePage({ role = 'patient' }) {
   const [selected, setSelected] = useState(['Visits', 'Lab results', 'Medications', 'Documents'])
-  const [events, setEvents] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState(''); const [isDemoAccount, setIsDemoAccount] = useState(false)
-  useEffect(() => { const controller = new AbortController(); fetchTimeline(controller.signal).then((payload) => { setEvents(payload.events); setIsDemoAccount(payload.isDemoAccount) }).catch((e) => { if (e.name !== 'AbortError') setError(e.message) }).finally(() => setLoading(false)); return () => controller.abort() }, [])
+  const [events, setEvents] = useState([]); const [loading, setLoading] = useState(true); const [error, setError] = useState('')
+  useEffect(() => { const controller = new AbortController(); fetchTimeline(controller.signal).then((payload) => { setEvents(payload.events) }).catch((e) => { if (e.name !== 'AbortError') setError(e.message) }).finally(() => setLoading(false)); return () => controller.abort() }, [])
   const typeFor = (event) => event.source === 'document' ? 'Documents' : event.category === 'Visit summary' ? 'Visits' : event.category === 'Lab result' ? 'Lab results' : event.category === 'Medication' || event.category === 'Prescription' ? 'Medications' : event.category
   const visibleTimeline = events.filter((event) => selected.includes(typeFor(event))).sort((a, b) => new Date(b.date) - new Date(a.date))
   return (
@@ -161,7 +159,6 @@ export function TimelinePage({ role = 'patient' }) {
       />
 
       {error && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{error}</p>}
-      {isDemoAccount && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">This demo timeline includes sample dates and records for exploring CareVault.</p>}
       <div className="grid gap-6 lg:grid-cols-[1fr_290px]">
         <div className="card p-5 sm:p-7">
           <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -415,7 +412,6 @@ export function DocumentsPage({ role = 'patient' }) {
       </button>}
 
       {role !== 'doctor' && uploading && <div className="mb-6 rounded-xl border border-teal/15 bg-white p-4" role="status" aria-live="polite"><div className="flex items-center justify-between text-xs"><span className="font-medium text-slate-700">{progress === 100 ? 'Saving to document storage…' : 'Sending file…'}</span><span className="tabular-nums text-slate-500">{progress}%</span></div><div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-teal transition-[width]" style={{ width: progress + '%' }}/></div></div>}
-      {role !== 'doctor' && documents.some((document) => document.isDemoSample) && <p className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900">Sample documents are included in the demo account. Other accounts only show documents they upload.</p>}
       {role !== 'doctor' && uploadError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{uploadError}</p>}
       {pageError && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">{pageError}</p>}
       {notice && <p role="status" className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">{notice}</p>}

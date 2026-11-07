@@ -147,7 +147,6 @@ export function LandingPage() {
               <RoleCard icon={FileHeart} label="FOR PATIENTS" title="Keep your health story together" text="Find records, track events over time, prepare visit details, and decide what to share." links={[["Medical records", "/records", FolderOpen], ["Health timeline", "/timeline", Clock3], ["Prepare for a visit", "/intake", ClipboardList]]} to="/patient" action="Explore patient view" />
               <RoleCard icon={Stethoscope} label="FOR CLINICIANS" title="Review shared context" text="See connected patient information, review incoming requests, and follow a clear clinical timeline." links={[["Connected patients", "/doctor/connections", UsersRound], ["Shared records", "/doctor/records", FolderOpen], ["Patient intake", "/doctor/intake", ClipboardList]]} to="/doctor" action="Explore clinician view" />
             </div>
-            <p className="mt-5 text-xs text-slate-400">This portfolio demo uses fictional records and does not coordinate or schedule care.</p>
           </div>
         </section>
 
@@ -155,9 +154,8 @@ export function LandingPage() {
           <div>
             <p className="eyebrow">Your choices stay visible</p>
             <h2 className="mt-2 text-3xl font-bold tracking-tight">Sharing should be clear at a glance.</h2>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">CareVault’s prototype makes sharing choices easy to find: connect with an invite code, review access by category, and return to those choices when your needs change.</p>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500">Search for a registered doctor by name or email, choose an access period, and revoke access whenever you need.</p>
             <Link to="/sharing" className="btn-primary mt-6">Explore sharing controls <ArrowRight size={16} /></Link>
-            <p className="mt-3 text-xs text-slate-400">These controls are a UI demo. No real records are shared.</p>
           </div>
           <div className="card p-5 sm:p-7">
             <div className="flex items-center justify-between border-b border-slate-100 pb-4">
@@ -238,7 +236,7 @@ export function HowItWorksPage() {
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <InfoTile icon={FolderOpen} title="Medical documents" text="Store and revisit files in your account." />
-            <InfoTile icon={Activity} title="Health timeline" text="Explore the timeline view with sample health events." />
+            <InfoTile icon={Activity} title="Health timeline" text="Explore health events and changes over time." />
             <InfoTile icon={ClipboardList} title="Your health intake" text="Add context in your own words." />
             <InfoTile icon={Clock3} title="Temporary access" text="Share with a doctor for a chosen duration." />
           </div>
@@ -678,7 +676,6 @@ export function AuthPage({ mode = 'login' }) {
               <button type="button" disabled={submitting} onClick={() => openDemo('patient')} className="btn-secondary justify-center !px-2 text-xs disabled:opacity-50">Demo Patient</button>
               <button type="button" disabled={submitting} onClick={() => openDemo('doctor')} className="btn-secondary justify-center !px-2 text-xs disabled:opacity-50">Demo Doctor</button>
             </div>
-            <p className="mt-2 text-center text-xs text-slate-400">Explore fictional sample records in demo accounts.</p>
           </div>
 
           <p className="mt-5 text-center text-sm text-slate-500">

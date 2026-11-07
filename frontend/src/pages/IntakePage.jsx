@@ -77,7 +77,7 @@ export default function IntakePage({ role = 'patient' }) {
         subtitle="Capture the details you want your care team to know before a visit."
         action={
           <span className="inline-flex w-fit items-center gap-2 rounded-full bg-amber-50 px-3 py-1.5 text-xs font-semibold text-amber-800">
-            <Info size={14} /> Demo form · not a diagnosis
+            <Info size={14} /> Not a diagnosis
           </span>
         }
       />
@@ -170,7 +170,7 @@ export default function IntakePage({ role = 'patient' }) {
 
           <section className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
             <p className="text-sm font-semibold text-amber-900">Not for urgent concerns</p>
-            <p className="mt-2 text-xs leading-5 text-amber-800">This portfolio demo is not monitored by a care team and does not provide medical advice. For urgent help, contact local emergency services.</p>
+            <p className="mt-2 text-xs leading-5 text-amber-800">This form is not monitored for urgent concerns and does not provide medical advice. For urgent help, contact local emergency services.</p>
           </section>
 
           <section className="card p-5">

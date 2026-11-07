@@ -12,7 +12,7 @@ export default function SettingsPage({ role = 'patient' }) {
   const doctor = role === 'doctor'
   return (
     <AppShell role={role}>
-      <PageHeading eyebrow="PREFERENCES" title="Settings" subtitle="Review your signed-in account and prototype notification preferences." />
+      <PageHeading eyebrow="PREFERENCES" title="Settings" subtitle="Review your signed-in account and notification preferences." />
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_300px]">
         <form className="space-y-5" onSubmit={(event) => { event.preventDefault(); setSaved(true) }}>
           <section className="card p-5 sm:p-7">
@@ -24,11 +24,11 @@ export default function SettingsPage({ role = 'patient' }) {
             </div>
           </section>
           <section className="card p-5 sm:p-7">
-            <div className="mb-5 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-lilac text-indigo-700"><Bell size={18}/></span><div><h2 className="font-semibold">Notifications</h2><p className="text-xs text-slate-500">Prototype controls; notification preferences are not saved yet.</p></div></div>
-            <Preference title="Email updates" detail="Receive a demo reminder when your records change." checked={emailUpdates} onChange={() => setEmailUpdates(!emailUpdates)} />
+            <div className="mb-5 flex items-center gap-3"><span className="grid h-10 w-10 place-items-center rounded-xl bg-lilac text-indigo-700"><Bell size={18}/></span><div><h2 className="font-semibold">Notifications</h2><p className="text-xs text-slate-500">Choose which updates you want to see.</p></div></div>
+            <Preference title="Email updates" detail="Receive a reminder when your records change." checked={emailUpdates} onChange={() => setEmailUpdates(!emailUpdates)} />
             <Preference title="Record activity" detail="Show a notification when a connected person shares a record." checked={recordUpdates} onChange={() => setRecordUpdates(!recordUpdates)} />
           </section>
-          <div className="flex flex-wrap items-center gap-3"><button className="btn-primary"><Save size={16}/> Save preferences</button>{saved&&<span role="status" className="inline-flex items-center gap-1.5 text-sm font-medium text-teal"><Check size={16}/> Saved in this demo</span>}</div>
+          <div className="flex flex-wrap items-center gap-3"><button className="btn-primary"><Save size={16}/> Save preferences</button>{saved&&<span role="status" className="inline-flex items-center gap-1.5 text-sm font-medium text-teal"><Check size={16}/> Saved</span>}</div>
         </form>
         <aside className="space-y-4">
           <section className="card p-5"><span className="grid h-10 w-10 place-items-center rounded-xl bg-amber-50 text-amber-700"><LockKeyhole size={18}/></span><h2 className="mt-3 font-semibold">Account security</h2><p className="mt-2 text-sm leading-6 text-slate-500">Use sign out from the navigation menu to end your active sessions. Password changes and recovery are not available yet.</p></section>

@@ -26,7 +26,7 @@ export default function Footer() {
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_2fr]">
           <div>
             <Link to="/"><Brand/></Link>
-            <p className="mt-4 max-w-sm text-sm leading-6 text-slate-500">CareVault provides private accounts and secure document storage, with additional health workflows in prototype form.</p>
+            <p className="mt-4 max-w-sm text-sm leading-6 text-slate-500">CareVault helps you keep your health information organized and share it with your care team.</p>
             <p className="mt-3 inline-flex items-center gap-2 text-xs text-slate-500"><ShieldCheck size={15} className="text-teal"/> Private accounts · per-user document storage</p>
           </div>
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
@@ -40,7 +40,7 @@ export default function Footer() {
             ))}
           </div>
         </div>
-        <div className="mt-10 border-t border-slate-100 pt-5 text-xs leading-5 text-slate-400">Accounts, health intake, sharing settings, and uploaded documents are stored by the connected backend. The timeline currently shows fictional sample events and is not monitored. CareVault does not provide medical advice.</div>
+        <div className="mt-10 border-t border-slate-100 pt-5 text-xs leading-5 text-slate-400">Accounts, health intake, sharing settings, and uploaded documents are stored by the connected backend. CareVault does not provide medical advice.</div>
       </div>
     </footer>
   )
