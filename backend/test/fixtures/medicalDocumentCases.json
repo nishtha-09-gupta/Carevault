@@ -1,0 +1,139 @@
+[
+  {
+    "name": "CBC",
+    "source": "[[PAGE 1]]\nSynthetic CBC panel. Hemoglobin 13.2 g/dL; reference 12.0-16.0.",
+    "kind": "test",
+    "test": {
+      "name": "Hemoglobin",
+      "value": "13.2",
+      "unit": "g/dL",
+      "referenceRange": "12.0-16.0",
+      "abnormalFlag": null
+    }
+  },
+  {
+    "name": "lipid profile",
+    "source": "[[PAGE 1]]\nSynthetic lipid panel. Total cholesterol 180 mg/dL.",
+    "kind": "test",
+    "test": {
+      "name": "Total cholesterol",
+      "value": "180",
+      "unit": "mg/dL"
+    }
+  },
+  {
+    "name": "thyroid profile",
+    "source": "[[PAGE 1]]\nSynthetic thyroid report. TSH 2.1 mIU/L.",
+    "kind": "test",
+    "test": {
+      "name": "TSH",
+      "value": "2.1",
+      "unit": "mIU/L"
+    }
+  },
+  {
+    "name": "HbA1c",
+    "source": "[[PAGE 1]]\nSynthetic diabetes report. HbA1c 5.7%.",
+    "kind": "test",
+    "test": {
+      "name": "HbA1c",
+      "value": "5.7",
+      "unit": "%"
+    }
+  },
+  {
+    "name": "MRI",
+    "source": "[[PAGE 1]]\nSynthetic MRI report. Impression: No acute finding is described.",
+    "kind": "section",
+    "section": {
+      "type": "impression",
+      "title": "Impression",
+      "text": "No acute finding is described."
+    }
+  },
+  {
+    "name": "X-ray",
+    "source": "[[PAGE 1]]\nSynthetic X-ray report. Findings: No displaced fracture is described.",
+    "kind": "section",
+    "section": {
+      "type": "findings",
+      "title": "Findings",
+      "text": "No displaced fracture is described."
+    }
+  },
+  {
+    "name": "ECG",
+    "source": "[[PAGE 1]]\nSynthetic ECG report. Interpretation: Sinus rhythm.",
+    "kind": "section",
+    "section": {
+      "type": "interpretation",
+      "title": "Interpretation",
+      "text": "Sinus rhythm."
+    }
+  },
+  {
+    "name": "prescription",
+    "source": "[[PAGE 1]]\nSynthetic prescription. Sample medicine 5 mg once daily.",
+    "kind": "medication",
+    "medication": {
+      "name": "Sample medicine",
+      "dosage": "5 mg",
+      "frequency": "once daily"
+    }
+  },
+  {
+    "name": "discharge summary",
+    "source": "[[PAGE 1]]\nSynthetic discharge summary. Discharge instructions: Follow-up documented in 2 weeks.",
+    "kind": "section",
+    "section": {
+      "type": "discharge-instructions",
+      "title": "Discharge instructions",
+      "text": "Follow-up documented in 2 weeks."
+    }
+  },
+  {
+    "name": "consultation notes",
+    "source": "[[PAGE 1]]\nSynthetic consultation note. Plan: Return for review.",
+    "kind": "section",
+    "section": {
+      "type": "plan",
+      "title": "Plan",
+      "text": "Return for review."
+    }
+  },
+  {
+    "name": "scanned report OCR text",
+    "source": "[[PAGE 1]]\nSynthetic OCR text: Appearance: clear.",
+    "kind": "detail",
+    "detail": {
+      "label": "Appearance",
+      "value": "clear"
+    }
+  },
+  {
+    "name": "unknown valid medical document",
+    "source": "[[PAGE 1]]\nSynthetic vaccination record. Vaccine label: Example vaccine.",
+    "kind": "detail",
+    "detail": {
+      "label": "Vaccine label",
+      "value": "Example vaccine"
+    }
+  },
+  {
+    "name": "mixed multi-page report",
+    "source": "[[PAGE 1]]\nSynthetic chemistry: Sodium 140 mmol/L.\n[[PAGE 2]]\nRadiology impression: No acute finding is described.",
+    "kind": "mixed",
+    "test": {
+      "name": "Sodium",
+      "value": "140",
+      "unit": "mmol/L",
+      "pageNumber": 1
+    },
+    "section": {
+      "type": "impression",
+      "title": "Radiology impression",
+      "text": "No acute finding is described.",
+      "pageNumber": 2
+    }
+  }
+]

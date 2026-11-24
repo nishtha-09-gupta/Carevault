@@ -7,9 +7,13 @@ import { kickDocumentAnalysis, requestDocumentAnalysis } from '../services/docum
 import { MedicalAnalysisResult } from '../services/medicalAnalysisSchema.js'
 
 function apiAnalysis(analysis) {
+  const progress = analysis.chunkProgress || { completed: 0, total: 0, failed: 0 }
   return {
     id: String(analysis._id), status: analysis.status, result: analysis.reviewedResult || analysis.result,
     confirmed: Boolean(analysis.confirmedAt), confirmedAt: analysis.confirmedAt,
+    chunkProgress: { completed: progress.completed || 0, total: progress.total || 0, failed: progress.failed || 0 },
+    chunks: (analysis.chunks || []).filter((chunk) => chunk.status !== 'split').map(({ index, pageStart, pageEnd, status, attempts, lastErrorCode, estimatedInputTokens }) => ({ index, pageStart, pageEnd, status, attempts, lastErrorCode, estimatedInputTokens })),
+    lastAnalyzedAt: analysis.lastAnalyzedAt || analysis.updatedAt || null,
     lastErrorCode: analysis.status === 'failed' ? analysis.lastErrorCode : null,
     attempts: analysis.attempts,
   }
@@ -53,7 +57,7 @@ export async function startDocumentAnalysis(req, res) {
     res.setHeader('Cache-Control', 'private, no-store')
     return res.status(202).json({ analysis: apiAnalysis(analysis) })
   } catch (error) {
-    if (error?.code === 'UNSUPPORTED_DOCUMENT_TYPE') return res.status(400).json({ error: error.message })
+    if (error?.code === 'DOCUMENT_UNSUPPORTED') return res.status(400).json({ error: error.message })
     throw error
   }
 }
@@ -94,7 +98,7 @@ export async function startSharedDocumentAnalysis(req, res) {
   } else if (!analysis) {
     try { analysis = await requestDocumentAnalysis(document) }
     catch (error) {
-      if (error?.code === 'UNSUPPORTED_DOCUMENT_TYPE') return res.status(400).json({ error: error.message })
+      if (error?.code === 'DOCUMENT_UNSUPPORTED') return res.status(400).json({ error: error.message })
       throw error
     }
   }
@@ -140,12 +144,22 @@ export async function reviewDocumentAnalysis(req, res) {
 function recordNotes(result) {
   const lines = []
   if (result.reportDate) lines.push(`Report date: ${result.reportDate}`)
+  if (result.documentType) lines.push(`Document type: ${result.documentType}`)
+  if (result.documentTitle) lines.push(`Document title: ${result.documentTitle}`)
+  if (result.provider) lines.push(`Provider: ${result.provider}`)
+  for (const person of result.patientInformation) lines.push(`${person.label}: ${person.value}`)
   for (const finding of result.findings) lines.push(`Finding: ${finding.text}`)
   for (const test of result.tests) {
     const value = [test.value, test.unit].filter(Boolean).join(' ')
     const details = [value || null, test.referenceRange ? `Reference range: ${test.referenceRange}` : null, test.abnormalFlag ? `Flag: ${test.abnormalFlag}` : null].filter(Boolean).join('; ')
-    lines.push(`${test.name}${details ? `: ${details}` : ''}`)
+    lines.push(`${test.name}${test.reportDate ? ` (${test.reportDate})` : ''}${details ? `: ${details}` : ''}`)
   }
+  for (const medication of result.medications) {
+    const details = [medication.dosage, medication.route, medication.frequency, medication.duration, medication.instructions].filter(Boolean).join('; ')
+    lines.push(`Medication: ${medication.name}${details ? `: ${details}` : ''}`)
+  }
+  for (const section of result.sections) lines.push(`${section.title || section.type}: ${section.text}`)
+  for (const detail of result.details) lines.push(`${detail.label}: ${detail.value}`)
   return lines.join('\n').slice(0, 5000)
 }
 
@@ -163,15 +177,16 @@ export async function confirmDocumentAnalysis(req, res) {
   }
   const result = MedicalAnalysisResult.safeParse(req.body?.result || analysis.reviewedResult || analysis.result)
   if (!result.success) return res.status(400).json({ error: 'Confirm fields do not match the expected format.' })
-  if (!result.data.reportDate && result.data.findings.length === 0 && result.data.tests.length === 0) {
+  if (!result.data.reportDate && result.data.findings.length === 0 && result.data.tests.length === 0 && result.data.medications.length === 0 && result.data.sections.length === 0 && result.data.details.length === 0 && result.data.patientInformation.length === 0) {
     return res.status(400).json({ error: 'There is no extracted information to add. You can create a medical record manually.' })
   }
   let record
   try {
     record = await MedicalRecord.findOneAndUpdate({ analysisId: analysis._id }, { $setOnInsert: {
       ownerId: req.user.id, analysisId: analysis._id, title: document.title,
-      category: result.data.tests.length ? 'Lab result' : 'Other',
-      eventDate: result.data.reportDate ? new Date(`${result.data.reportDate}T00:00:00.000Z`) : document.eventDate,
+      category: result.data.tests.length ? 'Lab result' : result.data.medications.length ? 'Prescription' : /radiology|imaging|x-ray|mri|ct|ultrasound/i.test(result.data.documentType || '') ? 'Imaging' : 'Other',
+      provider: result.data.provider || '',
+      eventDate: /^\d{4}-\d{2}-\d{2}$/.test(result.data.reportDate || '') && Number.isFinite(new Date(`${result.data.reportDate}T00:00:00.000Z`).getTime()) ? new Date(`${result.data.reportDate}T00:00:00.000Z`) : document.eventDate,
       notes: recordNotes(result.data), documentId: document._id,
     } }, { upsert: true, new: true, setDefaultsOnInsert: true })
   } catch (error) {

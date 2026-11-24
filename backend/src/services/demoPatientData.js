@@ -27,15 +27,15 @@ const DEMO_MEDICAL_RECORDS = [
 // SHA-256 allowlist for the reviewed, fictional PDF fixtures. A mismatch aborts
 // before the first storage upload so replaced files cannot enter demo storage.
 const FIXTURE_SHA256 = {
-  'annual_wellness_visit_sample_2026-08-29.pdf': 'e1b1d78f438e7d7edb7d63e36cbb3cc17a98a90fdd8968162531556e8dc6f6ce',
+  'annual_wellness_visit_sample_2026-08-29.pdf': 'd7204bbe830c439409ed353a6f89e09a6a4e8d35ef5acb22906b454e2c22a1c6',
   'cbc_blood_test_2026-10-04.pdf': '69988dcea581cfa75829356d40c230f074d32694d0ab6bac108ef7d17adbc4b8',
-  'chest_xray_report_2026-09-28.pdf': 'bc9e4dbe338d63c81ea30ac293999f562cd6f0cd58602f7324629b4352799657',
-  'discharge_summary_2026-09-20.pdf': '2c59293f907165941be7555fd7b85dfee33741e02dbd86f5d88e025cba6b7019',
-  'general_consultation_prescription_2026-09-30.pdf': '22afab8a0e5993754a3ce435c4257fb11eba79d1e39177beb707a488ff2a78ea',
-  'historical_health_document_sample_2025-12-04.pdf': 'e6546603e3d5e49bd54ad77f394eee1fda929c6e01cfc3ad2a26d2bcf2ba84a5',
-  'lipid_profile_2026-10-02.pdf': 'a79f593853f812154343f2a644d80a3f4bd0e7544818b07b0ee4ac48b4aa3480',
-  'medication_summary_sample_2026-05-03.pdf': '72f6f4f5660bee81b08a6470e754ccc073ccd251c2917aa3406384445a8609e8',
-  'metabolic_panel_sample_2026-06-12.pdf': 'dc39c25354f627101097187a819052ec9fb369dd3b307aa01a65e7dd8a456975',
+  'chest_xray_report_2026-09-28.pdf': '79549a795d2caa63a1e5d2ea69f62579144ab2eab11643d33aa5c7e656612fd4',
+  'discharge_summary_2026-09-20.pdf': 'de75d32bdab113b447f8d0861a8ae210be75620d58d4e82d6e49948d3783e73e',
+  'general_consultation_prescription_2026-09-30.pdf': 'cccc0e66cdbf008dcf3f9cbe15c413921b9bed0feb071b5ad2a1556e103ea806',
+  'historical_health_document_sample_2025-12-04.pdf': 'c6fb5e061cbe44dffec5f72dbb63e9abc6e7f9f8f7511b6ea86ee991ed37f9c2',
+  'lipid_profile_2026-10-02.pdf': 'ebcf2845e2be32cf784131594f572e61aa6fc10d8f6422565ee9e1848735b452',
+  'medication_summary_sample_2026-05-03.pdf': 'dbcb309d8adeb3c165fb9090f3f6dcd9899e2842ae46d3632e8e64bae069e4ae',
+  'metabolic_panel_sample_2026-06-12.pdf': '7117fd1465266c1b382a874ce81c198ae92b918dfa290e29464c2f46da640812',
 }
 
 export async function loadVerifiedDemoFixtures() {

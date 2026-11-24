@@ -33,25 +33,46 @@ function recordText(record) {
 
 function normalizedAnalysisResult(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  if (typeof value.toObject === 'function') value = value.toObject()
   const result = {
-    reportDate: dateValue(value.reportDate),
+    documentType: textValue(value.documentType) || null,
+    documentTypeEvidence: textValue(value.documentTypeEvidence) || null,
+    documentTitle: textValue(value.documentTitle) || null,
+    documentTitleEvidence: textValue(value.documentTitleEvidence) || null,
+    category: textValue(value.category) || null,
+    categoryEvidence: textValue(value.categoryEvidence) || null,
+    provider: textValue(value.provider) || null,
+    providerEvidence: textValue(value.providerEvidence) || null,
+    patientInformation: (Array.isArray(value.patientInformation) ? value.patientInformation : []).flatMap((item) => item && textValue(item.label) && textValue(item.value) ? [{ label: textValue(item.label), value: textValue(item.value), evidence: textValue(item.evidence) || null, pageNumber: item.pageNumber ?? null }] : []),
+    reportDate: value.reportDate instanceof Date ? dateValue(value.reportDate) : textValue(value.reportDate) || null,
     reportDateEvidence: textValue(value.reportDateEvidence) || null,
     findings: (Array.isArray(value.findings) ? value.findings : []).flatMap((finding) => {
       if (!finding || typeof finding !== 'object' || Array.isArray(finding)) return []
       const text = textValue(finding.text)
-      return text ? [{ text, evidence: textValue(finding.evidence) || null }] : []
+      return text ? [{ text, evidence: textValue(finding.evidence) || null, pageNumber: finding.pageNumber ?? null }] : []
     }),
     tests: (Array.isArray(value.tests) ? value.tests : []).flatMap((test) => {
       if (!test || typeof test !== 'object' || Array.isArray(test) || !textValue(test.name)) return []
-      const flag = ['high', 'low', 'positive', 'negative', 'abnormal', 'normal'].includes(test.abnormalFlag) ? test.abnormalFlag : null
       return [{
         name: textValue(test.name), nameEvidence: textValue(test.nameEvidence) || null,
         value: textValue(test.value) || null, valueEvidence: textValue(test.valueEvidence) || null,
         unit: textValue(test.unit) || null, unitEvidence: textValue(test.unitEvidence) || null,
         referenceRange: textValue(test.referenceRange) || null, referenceRangeEvidence: textValue(test.referenceRangeEvidence) || null,
-        abnormalFlag: flag, abnormalFlagEvidence: textValue(test.abnormalFlagEvidence) || null,
+        abnormalFlag: textValue(test.abnormalFlag) || null, abnormalFlagEvidence: textValue(test.abnormalFlagEvidence) || null,
+        pageNumber: test.pageNumber ?? null,
       }]
     }),
+    medications: (Array.isArray(value.medications) ? value.medications : []).flatMap((medication) => medication && textValue(medication.name) ? [{
+      name: textValue(medication.name), nameEvidence: textValue(medication.nameEvidence) || null,
+      dosage: textValue(medication.dosage) || null, dosageEvidence: textValue(medication.dosageEvidence) || null,
+      route: textValue(medication.route) || null, routeEvidence: textValue(medication.routeEvidence) || null,
+      frequency: textValue(medication.frequency) || null, frequencyEvidence: textValue(medication.frequencyEvidence) || null,
+      duration: textValue(medication.duration) || null, durationEvidence: textValue(medication.durationEvidence) || null,
+      instructions: textValue(medication.instructions) || null, instructionsEvidence: textValue(medication.instructionsEvidence) || null,
+      pageNumber: medication.pageNumber ?? null,
+    }] : []),
+    sections: (Array.isArray(value.sections) ? value.sections : []).flatMap((section) => section && textValue(section.type) && textValue(section.text) ? [{ type: textValue(section.type), title: textValue(section.title) || null, titleEvidence: textValue(section.titleEvidence) || null, text: textValue(section.text), evidence: textValue(section.evidence) || null, pageNumber: section.pageNumber ?? null }] : []),
+    details: (Array.isArray(value.details) ? value.details : []).flatMap((detail) => detail && textValue(detail.label) && textValue(detail.value) ? [{ label: textValue(detail.label), value: textValue(detail.value), evidence: textValue(detail.evidence) || null, pageNumber: detail.pageNumber ?? null }] : []),
   }
   const parsed = MedicalAnalysisResult.safeParse(result)
   return parsed.success ? parsed.data : null
@@ -61,8 +82,15 @@ function analysisText(analysis) {
   const result = normalizedAnalysisResult(analysis.reviewedResult) || normalizedAnalysisResult(analysis.result)
   if (!result) return ''
   return [result.reportDate && `Report date: ${result.reportDate}`,
+    result.documentType && `Document type: ${result.documentType}`,
+    result.documentTitle && `Document title: ${result.documentTitle}`,
+    result.provider && `Provider: ${result.provider}`,
+    ...result.patientInformation.map((item) => item.evidence || `${item.label}: ${item.value}`),
     ...result.findings.map((finding) => finding.evidence || finding.text),
-    ...result.tests.flatMap((test) => [test.nameEvidence || test.name, test.valueEvidence, test.unitEvidence, test.referenceRangeEvidence, test.abnormalFlagEvidence].filter(Boolean))]
+    ...result.tests.flatMap((test) => [test.nameEvidence || test.name, test.valueEvidence || test.value, test.unitEvidence || test.unit, test.referenceRangeEvidence || test.referenceRange, test.abnormalFlagEvidence || test.abnormalFlag].filter(Boolean)),
+    ...result.medications.map((item) => [item.nameEvidence || item.name, item.dosageEvidence || item.dosage, item.routeEvidence || item.route, item.frequencyEvidence || item.frequency, item.durationEvidence || item.duration, item.instructionsEvidence || item.instructions].filter(Boolean).join('; ')),
+    ...result.sections.map((item) => item.evidence || item.text),
+    ...result.details.map((item) => item.evidence || `${item.label}: ${item.value}`)]
     .map(textValue).filter(Boolean).join('\n')
 }
 
@@ -73,7 +101,7 @@ function comparableChanges(analyses, documents) {
     const result = normalizedAnalysisResult(analysis.reviewedResult) || normalizedAnalysisResult(analysis.result)
     if (!result) continue
     const document = documentMap.get(String(analysis.documentId))
-    const date = result.reportDate || (document?.eventDate ? new Date(document.eventDate).toISOString().slice(0, 10) : null)
+    const date = /^\d{4}-\d{2}-\d{2}$/.test(result.reportDate || '') ? dateValue(result.reportDate) : (document?.eventDate ? new Date(document.eventDate).toISOString().slice(0, 10) : null)
     if (!date) continue
     for (const test of result.tests) {
       if (!test.value || !test.unit || !test.name) continue
